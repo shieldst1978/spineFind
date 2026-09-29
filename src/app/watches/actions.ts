@@ -5,33 +5,21 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { formatKind, viewingFormats, watches } from "@/db/schema";
+import { cacheFilm } from "@/db/films";
+import { findFilmSuggestions, type FilmSuggestion } from "@/db/suggestions";
 import { matchKey } from "@/lib/match-key";
+import { tmdbEnabled } from "@/lib/tmdb";
 
 export type LogWatchState = { error?: string };
-export type FilmSuggestion = { title: string; year: number | null; owned: boolean; watches: number };
+export type { FilmSuggestion };
 
 type Kind = (typeof formatKind.enumValues)[number];
 const text = (v: FormDataEntryValue | null) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "");
 const fold = (s: string) => s.toLowerCase().replace(/\s+/g, "");
 
-/** Films from the watch log and the shelf whose titles match what's been typed. */
+/** Film suggestions while typing: your log and shelf first, then TMDB. */
 export async function suggestFilms(query: string): Promise<FilmSuggestion[]> {
-  const q = query.trim();
-  if (q.length < 2) return [];
-  const r = await db.execute<{ title: string; year: number | null; owned: boolean; watches: number }>(sql`
-    with films as (
-      select title, release_year, match_key, false as owned from watches
-      union all
-      select title, release_year, match_key, true from items where item_type = 'film'
-    )
-    select (array_agg(title order by owned desc, title))[1] as title, release_year as year,
-      bool_or(owned) as owned, count(*) filter (where not owned)::int as watches
-    from films
-    where title ilike ${`%${q}%`} or word_similarity(${q}, title) > 0.5
-    group by match_key, release_year
-    order by bool_or(title ilike ${`${q}%`}) desc, word_similarity(${q}, (array_agg(title))[1]) desc, count(*) desc
-    limit 8`);
-  return r.rows;
+  return findFilmSuggestions(query);
 }
 
 /** Removes a watch logged in the app. Watches imported from the spreadsheet can't be removed here. */
@@ -81,6 +69,11 @@ export async function addWatch(_prev: LogWatchState, form: FormData): Promise<Lo
     formatId = f.id;
   }
 
+  // A TMDB pick brings its ID; store the film's details (directors, genres) for stats.
+  const tmdbText = text(form.get("tmdb_id"));
+  const tmdbId = /^\d+$/.test(tmdbText) ? Number(tmdbText) : null;
+  if (tmdbId && tmdbEnabled()) await cacheFilm(tmdbId);
+
   await db.insert(watches).values({
     title,
     releaseYear: year,
@@ -88,6 +81,7 @@ export async function addWatch(_prev: LogWatchState, form: FormData): Promise<Lo
     formatId,
     formatFromMemory: false,
     matchKey: matchKey(title, year),
+    tmdbId,
   });
 
   revalidatePath("/");

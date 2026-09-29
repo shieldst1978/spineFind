@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { addWatch, suggestFilms, type FilmSuggestion, type LogWatchState } from "@/app/watches/actions";
@@ -67,18 +68,26 @@ export function LogWatchForm({ formats, today }: { formats: Format[]; today: str
             {suggestions.map((s) => (
               <li key={`${s.title}|${s.year}`} role="option" aria-selected={false}>
                 <button type="button" onClick={() => pick(s)}
-                  className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left hover:bg-stone-100 dark:hover:bg-stone-800">
+                  className="flex min-h-11 w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-stone-100 dark:hover:bg-stone-800">
+                  {s.posterPath ? (
+                    <Image src={`https://image.tmdb.org/t/p/w92${s.posterPath}`} alt="" width={28} height={42}
+                      className="h-[42px] w-7 shrink-0 rounded-sm object-cover" />
+                  ) : (
+                    <span className="h-[42px] w-7 shrink-0 rounded-sm bg-stone-200 dark:bg-stone-700" />
+                  )}
                   <span className="min-w-0 flex-1 truncate">
                     {s.title}
                     {s.year && <span className="text-stone-500"> ({s.year})</span>}
                   </span>
                   {s.owned && <span className="rounded bg-emerald-100 px-1.5 text-xs text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200">owned</span>}
                   {s.watches > 0 && <span className="text-xs text-stone-500">{s.watches}× watched</span>}
+                  {s.source === "tmdb" && <span className="text-xs text-stone-400">TMDB</span>}
                 </button>
               </li>
             ))}
           </ul>
         )}
+        <input type="hidden" name="tmdb_id" value={picked?.tmdbId ?? ""} />
         {picked?.owned && (
           <p className="text-xs text-emerald-700 dark:text-emerald-400">On your shelf: a disc format marks your copy as watched.</p>
         )}

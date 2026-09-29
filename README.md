@@ -25,6 +25,8 @@ The source of truth for now is the two spreadsheets in the project folder. They'
 
 **Stop the dev server before running the import.** PGlite allows only one process at a time to open the `.pglite` folder.
 
+**Stop the dev server with Ctrl+C**, which closes the database cleanly. Killing the process outright (Task Manager, `taskkill /f`) can corrupt `.pglite`. If that happens, the database won't open ("Aborted()"). Delete `.pglite` and run `npm run import` to rebuild it. Anything added in the app since the last import would be lost, which is another reason the OneDrive sync matters. Production will use Azure Database for PostgreSQL, which doesn't have this weakness.
+
 See [docs/schema.md](docs/schema.md) for the data model and import rules.
 
 ## Scripts
