@@ -35,7 +35,9 @@ export function BoxForm({
   cancelHref: string;
 }) {
   const [state, action, pending] = useActionState<BoxFormState, FormData>(serverAction, {});
-  const [title, setTitle] = useState(initial?.title ?? "");
+  // The box title follows the first film's title until you type your own
+  // (clearing it goes back to following). Editing an existing box starts typed.
+  const [ownTitle, setOwnTitle] = useState(initial?.title ?? "");
   const [colours, setColours] = useState(() => [0, 1, 2].map((i) => initial?.colours[i] ?? ""));
   const [location, setLocation] = useState(initial?.location ?? "shelf");
   const [rows, setRows] = useState<Row[]>(() =>
@@ -48,6 +50,7 @@ export function BoxForm({
   const removedExisting = (initial?.items.length ?? 0) - rows.filter((r) => r.id).length;
 
   const single = rows.length === 1;
+  const title = ownTitle || rows[0]?.title || "";
   const setRow = (key: number, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const addRow = () =>
@@ -56,39 +59,6 @@ export function BoxForm({
   return (
     <form action={action} className="space-y-6">
       <section className="space-y-3">
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Box title</span>
-          <input name="title" required value={title} onChange={(e) => setTitle(e.target.value)} className={field}
-            placeholder="As printed on the spine, e.g. The Mexico Trilogy" autoComplete="off" />
-        </label>
-
-        <fieldset className="space-y-1">
-          <legend className="text-sm font-medium">Spine colours, main colour first</legend>
-          <div className="flex items-stretch gap-3">
-            <Spine colours={colours.filter(Boolean)} className="min-h-24" />
-            <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
-              {colours.map((c, i) => (
-                <select key={i} name={`colour${i + 1}`} value={c} required={i === 0} className={field}
-                  onChange={(e) => setColours((cs) => cs.map((x, j) => (j === i ? e.target.value : x)))}>
-                  <option value="">{i === 0 ? "Main colour" : `Colour ${i + 1} (optional)`}</option>
-                  {COLOUR_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-              ))}
-            </div>
-          </div>
-        </fieldset>
-
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Kept</span>
-          <select name="location" value={location} onChange={(e) => setLocation(e.target.value)} className={field}>
-            <option value="shelf">On the shelf</option>
-            <option value="loft">In the loft</option>
-            <option value="gone">Gone (sold or given away)</option>
-          </select>
-        </label>
-      </section>
-
-      <section className="space-y-3">
         <h2 className="text-sm font-medium">{single ? "Film" : `Films in the box (${rows.length})`}</h2>
         {rows.map((r, i) => (
           <div key={r.key} className="space-y-2 rounded-lg border border-stone-200 p-3 dark:border-stone-800">
@@ -96,10 +66,10 @@ export function BoxForm({
             <input type="hidden" name="item_tmdb_id" value={r.tmdbId} />
             <div className="flex items-center gap-2">
               {/* Picking a suggestion fills the year and links TMDB; editing by hand unlinks it. */}
-              <FilmTitleInput name="item_title" value={r.title} className={field}
+              <FilmTitleInput name="item_title" value={r.title} className={field} required={i === 0}
                 onChange={(t) => setRow(r.key, { title: t, tmdbId: "" })}
                 onPick={(s) => setRow(r.key, { title: s.title, year: s.year ? String(s.year) : r.year, tmdbId: s.tmdbId ? String(s.tmdbId) : "" })}
-                placeholder={single ? (title ? `Same as box: ${title}` : "Film title (blank = box title)") : `Film ${i + 1} title`}
+                placeholder={single ? "Start typing a film title" : `Film ${i + 1} title`}
                 ariaLabel={`Film ${i + 1} title`} />
               {!single && (
                 <button type="button" onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
@@ -127,6 +97,44 @@ export function BoxForm({
             {removedExisting === 1 ? "1 film" : `${removedExisting} films`} will be taken out of this box when you save. Their watches stay in your log.
           </p>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">Box title</span>
+          <input name="title" value={title} onChange={(e) => setOwnTitle(e.target.value)} className={field}
+            placeholder="Same as the film, or type the box set's name" autoComplete="off" />
+          {!ownTitle && rows[0]?.title && (
+            <span className="block text-xs text-stone-500">
+              {single ? "Same as the film." : "Following the first film. Type the box set's name if it's different, e.g. The Mexico Trilogy."}
+            </span>
+          )}
+        </label>
+
+        <fieldset className="space-y-1">
+          <legend className="text-sm font-medium">Spine colours, main colour first</legend>
+          <div className="flex items-stretch gap-3">
+            <Spine colours={colours.filter(Boolean)} className="min-h-24" />
+            <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
+              {colours.map((c, i) => (
+                <select key={i} name={`colour${i + 1}`} value={c} required={i === 0} className={field}
+                  onChange={(e) => setColours((cs) => cs.map((x, j) => (j === i ? e.target.value : x)))}>
+                  <option value="">{i === 0 ? "Main colour" : `Colour ${i + 1} (optional)`}</option>
+                  {COLOUR_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              ))}
+            </div>
+          </div>
+        </fieldset>
+
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">Kept</span>
+          <select name="location" value={location} onChange={(e) => setLocation(e.target.value)} className={field}>
+            <option value="shelf">On the shelf</option>
+            <option value="loft">In the loft</option>
+            <option value="gone">Gone (sold or given away)</option>
+          </select>
+        </label>
       </section>
 
       {state.error && (

@@ -20,12 +20,8 @@ type Row = { id: string | null; title: string; year: number | null; format: Form
 
 /** Reads and checks the box form shared by Add and Edit. */
 function parseBoxForm(form: FormData): { title: string; colours: string[]; location: Location; rows: Row[] } | { error: string } {
-  const title = text(form.get("title"));
   const colours = ["colour1", "colour2", "colour3"].map((k) => text(form.get(k))).filter((c) => COLOUR_NAMES.includes(c));
   const location = text(form.get("location")) as Location;
-  if (!title) return { error: "Give the box a title." };
-  if (!colours.length) return { error: "Pick at least the main spine colour." };
-  if (!locationEnum.enumValues.includes(location)) return { error: "Choose where the box is kept." };
 
   const ids = form.getAll("item_id").map(text);
   const titles = form.getAll("item_title").map(text);
@@ -35,8 +31,7 @@ function parseBoxForm(form: FormData): { title: string; colours: string[]; locat
 
   const rows: Row[] = [];
   for (let i = 0; i < titles.length; i++) {
-    // A single-film box can leave the film title blank: it's the box title.
-    const filmTitle = titles[i] || (titles.length === 1 ? title : "");
+    const filmTitle = titles[i];
     if (!filmTitle && !years[i]) continue;
     if (!filmTitle) return { error: `Film ${i + 1} needs a title.` };
     const year = parseYear(years[i] ?? "");
@@ -46,7 +41,12 @@ function parseBoxForm(form: FormData): { title: string; colours: string[]; locat
     const tmdbId = /^\d{1,9}$/.test(tmdbIds[i] ?? "") ? Number(tmdbIds[i]) : null;
     rows.push({ id: UUID.test(ids[i] ?? "") ? ids[i] : null, title: filmTitle, year: year.year, format, tmdbId });
   }
-  if (!rows.length) return { error: "A box needs at least one film. To get rid of the whole box, use Delete this box." };
+  if (!rows.length) return { error: "Add at least one film." };
+
+  // The box is named after its first film unless you gave it its own title.
+  const title = text(form.get("title")) || rows[0].title;
+  if (!colours.length) return { error: "Pick at least the main spine colour." };
+  if (!locationEnum.enumValues.includes(location)) return { error: "Choose where the box is kept." };
   return { title, colours, location, rows };
 }
 
