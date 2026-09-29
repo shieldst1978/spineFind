@@ -1,0 +1,48 @@
+# Personal data stays local: the spreadsheets and exports live beside the code
+# as the source of truth, but never go into git.
+*.xlsx
+*.xls
+*.csv
+*.anb/
+~$*
+/data/
+
+# Local database
+/.pglite/
+*.db
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+/build
+
+# misc
+.DS_Store
+Thumbs.db
+*.pem
+
+# debug
+npm-debug.log*
+
+# env files
+.env*
+!.env.example
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Import reports (contain personal viewing data)
+/reports/
+
+# Personal data-review checklists
+/data-corrections.md
+/anote-comparison.md
