@@ -76,7 +76,7 @@ function Select({ name, value, label, options }: { name: string; value: string; 
   return (
     <label className="flex flex-col gap-1">
       <span className="text-stone-600 dark:text-stone-400">{label}</span>
-      <select name={name} defaultValue={value} className="rounded-lg border border-stone-300 bg-white px-2 py-2 dark:border-stone-700 dark:bg-stone-900">
+      <select name={name} defaultValue={value} className="w-full min-w-0 rounded-lg border border-stone-300 bg-white px-2 py-2 text-base sm:text-sm dark:border-stone-700 dark:bg-stone-900">
         {options.map(([v, l]) => (
           <option key={v} value={v}>{l}</option>
         ))}

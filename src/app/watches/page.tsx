@@ -9,7 +9,10 @@ export const metadata: Metadata = { title: "Watches · SpineFind" };
 const KINDS = ["disc", "cinema", "streaming", "tv", "download", "other"];
 const SORTS = ["date", "title", "release", "times", "age"] as const;
 const DECADES = Array.from({ length: 13 }, (_, i) => 1900 + i * 10).reverse();
-const field = "rounded-lg border border-stone-300 bg-white px-2 py-2 dark:border-stone-700 dark:bg-stone-900";
+// 16px text on phones: iOS Safari zooms the page into any control smaller than
+// that when tapped. min-w-0 stops a select sizing to its longest option.
+const field =
+  "w-full min-w-0 rounded-lg border border-stone-300 bg-white px-2 py-2 text-base sm:text-sm dark:border-stone-700 dark:bg-stone-900";
 
 type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
@@ -60,7 +63,7 @@ export default async function WatchesPage({ searchParams }: PageProps<"/watches"
   const filtering = Boolean(filters.q || filters.year || filters.formatId || filters.kind || filters.decade !== undefined || filters.owned);
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
+    <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 py-6">
       <header className="mb-4 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Watches</h1>
         <Link href="/watches/new" className="shrink-0 rounded-lg bg-stone-900 px-3 py-2 text-sm font-medium text-white dark:bg-stone-100 dark:text-stone-900">
