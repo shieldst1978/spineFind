@@ -29,6 +29,7 @@ export function FilmTitleInput({
   required?: boolean;
 }) {
   const [suggestions, setSuggestions] = useState<FilmSuggestion[]>([]);
+  const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
   const latest = useRef(0);
   const picked = useRef<string | null>(null);
@@ -38,8 +39,13 @@ export function FilmTitleInput({
     if (!open || value === picked.current) return;
     const id = ++latest.current;
     const t = setTimeout(async () => {
-      const s = value.trim() ? await suggestFilms(value) : [];
-      if (id === latest.current) setSuggestions(s);
+      try {
+        const s = value.trim() ? await suggestFilms(value) : [];
+        if (id === latest.current) { setSuggestions(s); setFailed(false); }
+      } catch {
+        // Usually a page left open across an update; say so rather than showing nothing.
+        if (id === latest.current) { setSuggestions([]); setFailed(true); }
+      }
     }, 200);
     return () => clearTimeout(t);
   }, [value, open]);
@@ -70,6 +76,12 @@ export function FilmTitleInput({
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
       />
+      {failed && (
+        <p role="status" className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+          Couldn&apos;t look up films. SpineFind may have been updated since this page opened.{" "}
+          <button type="button" onClick={() => window.location.reload()} className="underline">Reload</button>
+        </p>
+      )}
       {open && suggestions.length > 0 && (
         <ul role="listbox"
           className="absolute inset-x-0 top-full z-20 mt-1 max-h-80 overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-lg dark:border-stone-700 dark:bg-stone-900">

@@ -12,6 +12,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# One ID per build (the git commit). Pages left open from an older version then
+# reload instead of calling server actions that no longer exist.
+ARG DEPLOYMENT_ID=local
+ENV NEXT_DEPLOYMENT_ID=$DEPLOYMENT_ID
 RUN npm run build
 
 FROM node:24-alpine AS run
