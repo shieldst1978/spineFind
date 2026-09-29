@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- SpineFind: a film reel on the app's dark stone background. -->
+  <rect width="64" height="64" rx="14" fill="#1c1917"/>
+  <!-- film trailing off the reel -->
+  <path d="M32 54 H58" stroke="#f5f5f4" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="30" cy="31" r="23" fill="#f5f5f4"/>
+  <g fill="#1c1917">
+    <circle cx="30" cy="31" r="3.2"/>
+    <circle cx="30" cy="18.5" r="5.5"/>
+    <circle cx="41.9" cy="27.1" r="5.5"/>
+    <circle cx="37.3" cy="41.1" r="5.5"/>
+    <circle cx="22.7" cy="41.1" r="5.5"/>
+    <circle cx="18.1" cy="27.1" r="5.5"/>
+  </g>
+  <circle cx="30" cy="31" r="21" fill="none" stroke="#1c1917" stroke-width="1.2" opacity="0.35"/>
+</svg>

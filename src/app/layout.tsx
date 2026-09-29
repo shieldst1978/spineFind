@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "SpineFind",
   description: "Find films on the shelf by spine colour, and log every film watched.",
+  // Name under the Home Screen icon. Not a standalone web app: the Microsoft
+  // sign-in redirect works best inside ordinary Safari.
+  appleWebApp: { title: "SpineFind" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
