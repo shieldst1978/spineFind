@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoSubmitForm } from "@/components/auto-submit-form";
-import { listViewingFormats, searchWatches, watchYears, type WatchFilters } from "@/db/queries";
+import { listViewingFormats, searchWatches, watchDecades, watchYears, type WatchFilters } from "@/db/queries";
 import { removeLoggedWatch } from "./actions";
 
 export const metadata: Metadata = { title: "Watches · SpineFind" };
 
 const KINDS = ["disc", "cinema", "streaming", "tv", "download", "other"];
 const SORTS = ["date", "title", "release", "times", "age"] as const;
-const DECADES = Array.from({ length: 13 }, (_, i) => 1900 + i * 10).reverse();
 // 16px text on phones: iOS Safari zooms the page into any control smaller than
 // that when tapped. min-w-0 stops a select sizing to its longest option.
 const field =
@@ -33,11 +32,14 @@ export default async function WatchesPage({ searchParams }: PageProps<"/watches"
     page: int(one(sp.page)) ?? 1,
   };
 
-  const [{ rows, summary: s, page, pages }, formats, years] = await Promise.all([
+  const [{ rows, summary: s, page, pages }, formats, years, decades] = await Promise.all([
     searchWatches(filters),
     listViewingFormats(),
     watchYears(),
+    watchDecades(),
   ]);
+  // Remount the filter form whenever the filters change so its dropdowns never show stale choices.
+  const filterKey = ["q", "year", "format", "decade", "owned", "sort", "dir"].map((k) => one(sp[k])).join("|");
 
   // Links that keep the current filters but change one thing.
   const href = (patch: Record<string, string | undefined>) => {
@@ -77,7 +79,7 @@ export default async function WatchesPage({ searchParams }: PageProps<"/watches"
         </p>
       )}
 
-      <AutoSubmitForm action="/watches" className="mb-4 space-y-2">
+      <AutoSubmitForm key={filterKey} action="/watches" className="mb-4 space-y-2">
         <div className="flex gap-2">
           <input type="search" name="q" defaultValue={filters.q} placeholder="Film title"
             className="min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-base dark:border-stone-700 dark:bg-stone-900" />
@@ -99,7 +101,7 @@ export default async function WatchesPage({ searchParams }: PageProps<"/watches"
           </select>
           <select name="decade" defaultValue={one(sp.decade)} className={field} aria-label="Release decade">
             <option value="">Any decade</option>
-            {DECADES.map((d) => <option key={d} value={d}>{d}s</option>)}
+            {decades.map((d) => <option key={d.decade} value={d.decade}>{d.decade}s ({d.n})</option>)}
           </select>
           <select name="owned" defaultValue={one(sp.owned)} className={field} aria-label="Owned">
             <option value="">Owned or not</option>

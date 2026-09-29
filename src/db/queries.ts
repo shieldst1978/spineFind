@@ -341,6 +341,113 @@ export async function watchYears() {
   return r.rows;
 }
 
+export type PickCriteria = {
+  mode: "unwatched" | "rewatch" | "any";
+  format?: MediaFormat;
+  decade?: number;
+  colour?: string;
+  notSeenYears?: number;
+  exclude?: string[];
+};
+
+export type PickCandidate = {
+  id: string;
+  title: string;
+  year: number | null;
+  format: MediaFormat;
+  box: string;
+  spineColours: string[];
+  watched: boolean;
+  lastWatched: string | null;
+  times: number;
+};
+
+function pickWhere(c: Omit<PickCriteria, "decade" | "exclude">): SQL[] {
+  const where: SQL[] = [sql`i.item_type = 'film'`, sql`p.location = 'shelf'`];
+  if (c.mode === "unwatched") where.push(sql`not s.watched`);
+  if (c.mode === "rewatch") where.push(sql`s.watched`);
+  if (c.format) where.push(sql`i.format = ${c.format}`);
+  if (c.colour) where.push(sql`${c.colour} = any(p.spine_colours)`);
+  return where;
+}
+
+/** Decades with at least one shelf film matching the other criteria, newest first, with counts. */
+export async function pickDecades(c: Omit<PickCriteria, "decade" | "exclude">) {
+  const r = await db.execute<{ decade: number; n: number }>(sql`
+    select i.release_year / 10 * 10 as decade, count(*)::int as n
+    from items i
+    join products p on p.id = i.product_id
+    join item_watch_status s on s.item_id = i.id
+    where ${sql.join(pickWhere(c), sql` and `)} and i.release_year is not null
+    group by 1 order by 1 desc`);
+  return r.rows;
+}
+
+/** Release decades that appear in the watch log, newest first, with counts. */
+export async function watchDecades() {
+  const r = await db.execute<{ decade: number; n: number }>(sql`
+    select release_year / 10 * 10 as decade, count(*)::int as n
+    from watches where release_year is not null
+    group by 1 order by 1 desc`);
+  return r.rows;
+}
+
+/** A random release decade that has at least one film matching the other criteria. */
+export async function randomDecade(c: Omit<PickCriteria, "decade" | "exclude">): Promise<number | null> {
+  // Each decade with a match is equally likely, however many films it has.
+  const r = await db.execute<{ decade: number }>(sql`
+    select decade from (
+      select distinct i.release_year / 10 * 10 as decade
+      from items i
+      join products p on p.id = i.product_id
+      join item_watch_status s on s.item_id = i.id
+      where ${sql.join(pickWhere(c), sql` and `)} and i.release_year is not null
+    ) d
+    order by random() limit 1`);
+  return r.rows[0]?.decade ?? null;
+}
+
+/** Random films from the shelf matching the criteria: the pick plus a few runners-up. */
+export async function pickFilms(c: PickCriteria, count = 4) {
+  const where = pickWhere(c);
+  if (c.decade !== undefined) where.push(sql`i.release_year / 10 * 10 = ${c.decade}`);
+
+  const rows = await db.execute<{
+    id: string; title: string; year: number | null; format: MediaFormat; box: string; spine_colours: string[];
+    watched: boolean; last_watched: string | null; times: number; total: number;
+  }>(sql`
+    with cand as (
+      select i.id, i.title, i.release_year as year, i.format, p.title as box, p.spine_colours, s.watched,
+        (select max(w.watched_on) from watches w where w.match_key = i.match_key)::text as last_watched,
+        (select count(*) from watches w where w.match_key = i.match_key)::int as times
+      from items i
+      join products p on p.id = i.product_id
+      join item_watch_status s on s.item_id = i.id
+      where ${sql.join(where, sql` and `)}
+    )
+    select *, count(*) over ()::int as total from cand
+    where true
+      ${c.notSeenYears ? sql`and (last_watched is null or last_watched::date < current_date - make_interval(years => ${c.notSeenYears}))` : sql``}
+      ${c.exclude?.length ? sql`and id::text not in (${sql.join(c.exclude.map((x) => sql`${x}`), sql`, `)})` : sql``}
+    order by random()
+    limit ${count}`);
+
+  return {
+    total: rows.rows[0]?.total ?? 0,
+    picks: rows.rows.map<PickCandidate>((r) => ({
+      id: r.id,
+      title: r.title,
+      year: r.year,
+      format: r.format,
+      box: r.box,
+      spineColours: r.spine_colours,
+      watched: r.watched,
+      lastWatched: r.last_watched,
+      times: r.times,
+    })),
+  };
+}
+
 export async function shelfTotals() {
   const r = await db.execute<{ products: number; films: number; watched: number }>(sql`
     select

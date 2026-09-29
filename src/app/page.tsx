@@ -47,7 +47,11 @@ export default async function ShelfPage({ searchParams }: PageProps<"/">) {
         </p>
       )}
 
-      <ShelfFilters q={q} colours={colours} format={format ?? ""} location={location} watched={watched ?? ""} />
+      {/* Keyed on the filters so the form remounts (and shows the right values) when they change. */}
+      <ShelfFilters
+        key={[q, colours.join(","), format, location, watched].join("|")}
+        q={q} colours={colours} format={format ?? ""} location={location} watched={watched ?? ""}
+      />
 
       <p className="mt-6 mb-3 text-sm text-stone-600 dark:text-stone-400" aria-live="polite">
         {filtering ? `${total} ${total === 1 ? "box matches" : "boxes match"}` : `${total} boxes on the shelf`}
