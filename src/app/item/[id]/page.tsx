@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Spine } from "@/components/spine";
 import { getItem, listViewingFormats, watchesFor } from "@/db/queries";
 import { DISC_TO_MEDIA } from "@/db/seed-formats";
-import { logWatch, removeWatch, setSeenBefore } from "./actions";
+import { logWatch, setSeenBefore } from "./actions";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const field =
@@ -57,6 +57,8 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
               {item.box.title !== item.title && <> · in <em>{item.box.title}</em></>}
               {" · "}
               {{ shelf: "on the shelf", loft: "in the loft", gone: "gone" }[item.box.location]}
+              {" · "}
+              <Link href={`/box/${item.box.id}`} className="underline">Edit box</Link>
             </p>
           </div>
         </div>
@@ -66,9 +68,9 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
         <Status item={item} discWatches={discWatches.length} lastDisc={discWatches[0]?.watchedOn} />
       </section>
 
-      {(logged || sp.removed) && (
+      {(logged || sp.updated || sp.deleted) && (
         <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
-          {logged ? `Logged a watch on ${formatDate(logged)}.` : "Watch removed."}
+          {logged ? `Logged a watch on ${formatDate(logged)}.` : sp.updated ? "Saved your changes to the watch." : "Watch deleted."}
         </p>
       )}
       {error && (
@@ -124,13 +126,11 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
                     {w.kind === "disc" && <span className="ml-1.5 text-xs text-emerald-700 dark:text-emerald-400">disc</span>}
                     {w.fromMemory && <span className="ml-1.5 text-xs text-stone-500" title="aNote didn't record the format">from memory</span>}
                   </span>
-                  {w.addedInApp && (
-                    <form action={removeWatch.bind(null, item.id, w.id)}>
-                      <button type="submit" className="rounded px-2 py-1 text-xs text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800" aria-label={`Remove watch on ${formatDate(w.watchedOn)}`}>
-                        Remove
-                      </button>
-                    </form>
-                  )}
+                  <Link href={`/watches/${w.id}?back=${encodeURIComponent(`/item/${item.id}`)}`}
+                    className="rounded px-2 py-1.5 text-xs text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800"
+                    aria-label={`Edit watch on ${formatDate(w.watchedOn)}`}>
+                    Edit
+                  </Link>
                 </li>
               ))}
             </ul>

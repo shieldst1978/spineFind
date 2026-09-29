@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
@@ -47,10 +47,4 @@ export async function setSeenBefore(itemId: string, seen: boolean) {
     .set({ watchedBeforeLogging: seen, updatedAt: new Date() })
     .where(and(eq(items.id, itemId), eq(items.itemType, "film")));
   back(itemId);
-}
-
-/** Removes a watch logged in the app. Watches from the spreadsheet are left alone. */
-export async function removeWatch(itemId: string, watchId: string) {
-  await db.delete(watches).where(and(eq(watches.id, watchId), isNull(watches.legacyRow)));
-  back(itemId, { removed: "1" });
 }

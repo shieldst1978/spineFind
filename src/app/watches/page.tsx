@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoSubmitForm } from "@/components/auto-submit-form";
 import { listViewingFormats, searchWatches, watchDecades, watchYears, type WatchFilters } from "@/db/queries";
-import { removeLoggedWatch } from "./actions";
 
 export const metadata: Metadata = { title: "Watches · SpineFind" };
 
@@ -62,6 +61,8 @@ export default async function WatchesPage({ searchParams }: PageProps<"/watches"
       </Link>
     );
   };
+  // Where an edit returns to: this view, minus any one-off confirmation message.
+  const backHere = href({ logged: undefined, updated: undefined, deleted: undefined });
   const filtering = Boolean(filters.q || filters.year || filters.formatId || filters.kind || filters.decade !== undefined || filters.owned);
 
   return (
@@ -73,9 +74,11 @@ export default async function WatchesPage({ searchParams }: PageProps<"/watches"
         </Link>
       </header>
 
-      {one(sp.logged) && (
+      {(one(sp.logged) || one(sp.updated) || one(sp.deleted)) && (
         <p role="status" className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
-          Logged <strong>{one(sp.logged)}</strong>. It&apos;s at the top of the list.
+          {one(sp.logged) ? <>Logged <strong>{one(sp.logged)}</strong>. It&apos;s at the top of the list.</>
+            : one(sp.updated) ? <>Saved your changes to <strong>{one(sp.updated)}</strong>.</>
+            : <>Deleted the watch of <strong>{one(sp.deleted)}</strong>.</>}
         </p>
       )}
 
@@ -170,14 +173,11 @@ export default async function WatchesPage({ searchParams }: PageProps<"/watches"
                     {w.ownedItemId && <Link href={`/item/${w.ownedItemId}`} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">{w.ownedFormat}</Link>}
                   </td>
                   <td className="w-0 px-1 py-1 text-right">
-                    {w.addedInApp && (
-                      <form action={removeLoggedWatch.bind(null, w.id, href({ logged: undefined }))}>
-                        <button type="submit" className="rounded px-2 py-1.5 text-xs text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800"
-                          aria-label={`Remove watch of ${w.title} on ${fmtDate(w.watchedOn)}`}>
-                          Remove
-                        </button>
-                      </form>
-                    )}
+                    <Link href={`/watches/${w.id}?back=${encodeURIComponent(backHere)}`}
+                      className="inline-block rounded px-2 py-1.5 text-xs text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800"
+                      aria-label={`Edit watch of ${w.title} on ${fmtDate(w.watchedOn)}`}>
+                      Edit
+                    </Link>
                   </td>
                 </tr>
               ))}

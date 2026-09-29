@@ -20,6 +20,8 @@ export default async function ShelfPage({ searchParams }: PageProps<"/">) {
   const watchedParam = one(sp.watched);
   const watched: Filters["watched"] = watchedParam === "watched" || watchedParam === "unwatched" ? watchedParam : undefined;
   const added = one(sp.added) === "1";
+  const updated = one(sp.updated) === "1";
+  const deleted = one(sp.deleted);
 
   const [{ products, total }, totals] = await Promise.all([
     searchShelf({ q, colours, format, location, watched }),
@@ -41,9 +43,9 @@ export default async function ShelfPage({ searchParams }: PageProps<"/">) {
         </Link>
       </header>
 
-      {added && (
+      {(added || updated || deleted) && (
         <p role="status" className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
-          Added. Here it is.
+          {added ? "Added. Here it is." : updated ? "Saved. Here it is." : <>Deleted <strong>{deleted}</strong>.</>}
         </p>
       )}
 
@@ -68,14 +70,20 @@ export default async function ShelfPage({ searchParams }: PageProps<"/">) {
             <li key={p.id} className="flex gap-3 rounded-lg border border-stone-200 bg-white p-3 dark:border-stone-800 dark:bg-stone-900">
               <Spine colours={p.spineColours} className="min-h-14" />
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <h2 className="font-medium">{p.title}</h2>
-                  <span className="text-xs text-stone-500">{p.spineColours.join(" / ")}</span>
-                  {p.location !== "shelf" && (
-                    <span className="rounded bg-amber-100 px-1.5 text-xs text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
-                      {p.location === "loft" ? "Loft" : "Gone"}
-                    </span>
-                  )}
+                <div className="flex items-start gap-2">
+                  <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+                    <h2 className="font-medium">{p.title}</h2>
+                    <span className="text-xs text-stone-500">{p.spineColours.join(" / ")}</span>
+                    {p.location !== "shelf" && (
+                      <span className="rounded bg-amber-100 px-1.5 text-xs text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+                        {p.location === "loft" ? "Loft" : "Gone"}
+                      </span>
+                    )}
+                  </div>
+                  <Link href={`/box/${p.id}`} className="-my-1 shrink-0 rounded-md px-2 py-1.5 text-xs text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800"
+                    aria-label={`Edit ${p.title}`}>
+                    Edit
+                  </Link>
                 </div>
                 <ul className={`mt-1 text-sm ${p.items.length > 1 ? "divide-y divide-stone-100 dark:divide-stone-800" : ""}`}>
                   {p.items.map((it) => (

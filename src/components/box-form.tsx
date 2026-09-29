@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { addBox, type AddBoxState } from "@/app/add/actions";
+import type { BoxFormState } from "@/app/box/actions";
 import { Spine } from "@/components/spine";
 import { COLOUR_NAMES } from "@/lib/colours";
 
@@ -10,20 +10,45 @@ const FORMATS = ["4K UltraHD", "Blu Ray", "DVD", "HD DVD"] as const;
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base dark:border-stone-700 dark:bg-stone-900";
 
-type Row = { key: number; title: string; year: string; format: string };
+type Row = { key: number; id: string; title: string; year: string; format: string };
 
-export function AddBoxForm() {
-  const [state, action, pending] = useActionState<AddBoxState, FormData>(addBox, {});
-  const [title, setTitle] = useState("");
-  const [colours, setColours] = useState(["", "", ""]);
-  const [location, setLocation] = useState("shelf");
-  const [rows, setRows] = useState<Row[]>([{ key: 0, title: "", year: "", format: "Blu Ray" }]);
+export type BoxFormInitial = {
+  title: string;
+  colours: string[];
+  location: string;
+  items: { id: string; title: string; year: number | null; format: string }[];
+};
+
+/** The box form for both adding and editing. Existing films carry their id so they're updated, not replaced. */
+export function BoxForm({
+  action: serverAction,
+  initial,
+  submitLabel,
+  pendingLabel,
+  cancelHref,
+}: {
+  action: (prev: BoxFormState, form: FormData) => Promise<BoxFormState>;
+  initial?: BoxFormInitial;
+  submitLabel: string;
+  pendingLabel: string;
+  cancelHref: string;
+}) {
+  const [state, action, pending] = useActionState<BoxFormState, FormData>(serverAction, {});
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [colours, setColours] = useState(() => [0, 1, 2].map((i) => initial?.colours[i] ?? ""));
+  const [location, setLocation] = useState(initial?.location ?? "shelf");
+  const [rows, setRows] = useState<Row[]>(() =>
+    initial?.items.length
+      ? initial.items.map((it, i) => ({ key: i, id: it.id, title: it.title, year: it.year ? String(it.year) : "", format: it.format }))
+      : [{ key: 0, id: "", title: "", year: "", format: "Blu Ray" }],
+  );
+  const removedExisting = (initial?.items.length ?? 0) - rows.filter((r) => r.id).length;
 
   const single = rows.length === 1;
   const setRow = (key: number, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const addRow = () =>
-    setRows((rs) => [...rs, { key: Math.max(...rs.map((r) => r.key)) + 1, title: "", year: "", format: rs.at(-1)!.format }]);
+    setRows((rs) => [...rs, { key: Math.max(...rs.map((r) => r.key)) + 1, id: "", title: "", year: "", format: rs.at(-1)!.format }]);
 
   return (
     <form action={action} className="space-y-6">
@@ -64,6 +89,7 @@ export function AddBoxForm() {
         <h2 className="text-sm font-medium">{single ? "Film" : `Films in the box (${rows.length})`}</h2>
         {rows.map((r, i) => (
           <div key={r.key} className="space-y-2 rounded-lg border border-stone-200 p-3 dark:border-stone-800">
+            <input type="hidden" name="item_id" value={r.id} />
             <div className="flex items-center gap-2">
               <input name="item_title" value={r.title} onChange={(e) => setRow(r.key, { title: e.target.value })}
                 className={field} autoComplete="off"
@@ -71,7 +97,7 @@ export function AddBoxForm() {
                 aria-label={`Film ${i + 1} title`} />
               {!single && (
                 <button type="button" onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
-                  className="shrink-0 rounded-lg px-2 py-2 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800"
+                  className="shrink-0 rounded-lg px-3 py-2 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800"
                   aria-label={`Remove film ${i + 1}`}>✕</button>
               )}
             </div>
@@ -90,6 +116,11 @@ export function AddBoxForm() {
           className="w-full rounded-lg border border-dashed border-stone-300 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-900">
           + Add another film (box set)
         </button>
+        {removedExisting > 0 && (
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            {removedExisting === 1 ? "1 film" : `${removedExisting} films`} will be taken out of this box when you save. Their watches stay in your log.
+          </p>
+        )}
       </section>
 
       {state.error && (
@@ -101,9 +132,9 @@ export function AddBoxForm() {
       <div className="flex gap-3">
         <button type="submit" disabled={pending}
           className="flex-1 rounded-lg bg-stone-900 px-4 py-2.5 font-medium text-white disabled:opacity-60 dark:bg-stone-100 dark:text-stone-900">
-          {pending ? "Adding…" : "Add to SpineFind"}
+          {pending ? pendingLabel : submitLabel}
         </button>
-        <Link href="/" className="rounded-lg px-4 py-2.5 text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-900">
+        <Link href={cancelHref} className="rounded-lg px-4 py-2.5 text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-900">
           Cancel
         </Link>
       </div>

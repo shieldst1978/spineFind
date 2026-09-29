@@ -177,6 +177,58 @@ export async function watchesFor(matchKey: string): Promise<WatchRow[]> {
   }));
 }
 
+export async function getBox(id: string) {
+  const r = await db.execute<{
+    id: string; title: string; spine_colours: string[]; location: Location;
+    items: { id: string; title: string; year: number | null; format: MediaFormat; watches: number }[] | null;
+  }>(sql`
+    select p.id, p.title, p.spine_colours, p.location,
+      (select json_agg(json_build_object('id', i.id, 'title', i.title, 'year', i.release_year, 'format', i.format,
+          'watches', (select count(*) from watches w where w.match_key = i.match_key)) order by i.position)
+       from items i where i.product_id = p.id) as items
+    from products p where p.id = ${id}`);
+  const b = r.rows[0];
+  if (!b) return null;
+  return { id: b.id, title: b.title, spineColours: b.spine_colours, location: b.location, items: b.items ?? [] };
+}
+
+export type WatchDetail = {
+  id: string;
+  title: string;
+  releaseYear: number | null;
+  watchedOn: string;
+  formatId: number;
+  format: string;
+  fromMemory: boolean;
+  fromSpreadsheet: boolean;
+  ownedItemId: string | null;
+};
+
+export async function getWatch(id: string): Promise<WatchDetail | null> {
+  const r = await db.execute<{
+    id: string; title: string; release_year: number | null; watched_on: string; format_id: number; format: string;
+    format_from_memory: boolean; legacy_row: number | null; owned_item_id: string | null;
+  }>(sql`
+    select w.id, w.title, w.release_year, w.watched_on::text as watched_on, w.format_id, f.name as format,
+      w.format_from_memory, w.legacy_row,
+      (select i.id from items i where i.match_key = w.match_key and i.item_type = 'film' limit 1) as owned_item_id
+    from watches w join viewing_formats f on f.id = w.format_id
+    where w.id = ${id}`);
+  const w = r.rows[0];
+  if (!w) return null;
+  return {
+    id: w.id,
+    title: w.title,
+    releaseYear: w.release_year,
+    watchedOn: w.watched_on,
+    formatId: w.format_id,
+    format: w.format,
+    fromMemory: w.format_from_memory,
+    fromSpreadsheet: w.legacy_row !== null,
+    ownedItemId: w.owned_item_id,
+  };
+}
+
 export async function listViewingFormats() {
   const r = await db.execute<{ id: number; name: string; kind: string; uses: number }>(sql`
     select f.id, f.name, f.kind, count(w.id)::int as uses

@@ -1,6 +1,6 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
@@ -20,14 +20,6 @@ const fold = (s: string) => s.toLowerCase().replace(/\s+/g, "");
 /** Film suggestions while typing: your log and shelf first, then TMDB. */
 export async function suggestFilms(query: string): Promise<FilmSuggestion[]> {
   return findFilmSuggestions(query);
-}
-
-/** Removes a watch logged in the app. Watches imported from the spreadsheet can't be removed here. */
-export async function removeLoggedWatch(watchId: string, backTo: string) {
-  await db.execute(sql`delete from watches where id = ${watchId} and legacy_row is null`);
-  revalidatePath("/");
-  revalidatePath("/watches");
-  redirect(backTo.startsWith("/watches") ? backTo : "/watches");
 }
 
 /** Logs a watch of any film, owned or not. Can create a new viewing format on the way. */
