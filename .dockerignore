@@ -1,0 +1,18 @@
+# Keep personal data, local databases and secrets out of the image.
+*.xlsx
+*.xls
+*.csv
+*.anb
+~$*
+.pglite*
+reports
+data-corrections.md
+anote-comparison.md
+.env*
+!.env.example
+
+node_modules
+.next
+.git
+Dockerfile
+.dockerignore

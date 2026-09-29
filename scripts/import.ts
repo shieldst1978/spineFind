@@ -10,8 +10,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import ExcelJS from "exceljs";
 import { sql } from "drizzle-orm";
-import { migrate } from "drizzle-orm/pglite/migrator";
-import { createDb } from "../src/db/client";
+import { createDb, PGLITE_DIR } from "../src/db/client";
 import { items, products, reviewFlags, viewingFormats, watches } from "../src/db/schema";
 import { DISC_TO_MEDIA, SEED_FORMATS } from "../src/db/seed-formats";
 import { itemTypeFor } from "../src/lib/item-type";
@@ -101,8 +100,21 @@ async function main() {
   const report: string[] = [];
   const say = (line = "") => report.push(line);
 
-  const { client, db } = createDb();
-  await migrate(db, { migrationsFolder: path.join(ROOT, "drizzle") });
+  const { client, db, kind, migrate } = createDb();
+  if (kind === "postgres") {
+    // Rebuilding wipes the database: never do that to the hosted one by accident.
+    const host = new URL(process.env.DATABASE_URL!).hostname;
+    if (!process.argv.includes("--cloud")) {
+      console.error(`Stopped: DATABASE_URL points at ${host}. Importing replaces everything in it.\n` +
+        `Run with --cloud if you really mean to rebuild the hosted database.`);
+      await client.close();
+      process.exit(2);
+    }
+    console.log(`Importing into hosted Postgres at ${host}`);
+  } else {
+    console.log(`Importing into local PGlite at ${path.resolve(PGLITE_DIR)}`);
+  }
+  await migrate(path.join(ROOT, "drizzle"));
 
   // ---- safety: don't wipe titles added in the app that the spreadsheet lacks
   const sfRows = await readSheet(SPINEFIND_XLSX);

@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 import { LogWatchForm } from "@/components/log-watch-form";
 import { listViewingFormats } from "@/db/queries";
 
 export const metadata: Metadata = { title: "Log a watch · SpineFind" };
 
 export default async function NewWatchPage() {
+  // Render per request: the format list lives in the database, which must not
+  // be read at build time.
+  await connection();
   const formats = await listViewingFormats();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" });
   return (
