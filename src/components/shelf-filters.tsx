@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRef } from "react";
+import { withBase } from "@/lib/base-path";
 import { COLOUR_NAMES, swatch } from "@/lib/colours";
 
 type Props = {
@@ -23,7 +24,7 @@ export function ShelfFilters({ q, colours, format, location, watched }: Props) {
   return (
     <form
       ref={form}
-      action="/"
+      action={withBase("/")}
       className="space-y-4"
       onChange={(e) => {
         // The title box submits on Enter/Search; everything else applies immediately.

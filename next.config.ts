@@ -1,6 +1,24 @@
 import type { NextConfig } from "next";
+import { BASE_PATH } from "./src/lib/base-path";
 
 const nextConfig: NextConfig = {
+  // Served at tim-shields.com/spinefind.
+  basePath: BASE_PATH,
+  async redirects() {
+    return [
+      // The bare domain has nothing else on it (yet), so send visitors to the app.
+      { source: "/", destination: BASE_PATH, basePath: false, permanent: false },
+      // A server action's redirect() in a plain (pre-JavaScript) form post is sent
+      // without the base path, e.g. "/watches?logged=…". Catch those and put the
+      // prefix back; with JavaScript running, Next adds it itself.
+      ...["/watches/:path*", "/item/:path*", "/pick", "/add"].map((source) => ({
+        source,
+        destination: `${BASE_PATH}${source}`,
+        basePath: false as const,
+        permanent: false,
+      })),
+    ];
+  },
   // Self-contained server bundle for the container image (.next/standalone).
   output: "standalone",
   // Load these from node_modules at runtime instead of bundling them: PGlite
