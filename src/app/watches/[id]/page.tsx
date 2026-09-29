@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { EditWatchForm } from "@/components/edit-watch-form";
 import { getWatch, listViewingFormats } from "@/db/queries";
 import { todayUk, UUID } from "@/lib/form-values";
-import { deleteWatch } from "./actions";
+import { deleteWatch, updateWatch } from "./actions";
 
 export const metadata: Metadata = { title: "Edit watch · SpineFind" };
 
@@ -29,7 +29,7 @@ export default async function EditWatchPage({ params, searchParams }: PageProps<
         </p>
       </header>
 
-      <EditWatchForm watch={watch} formats={formats} today={todayUk()} back={back} />
+      <EditWatchForm save={updateWatch.bind(null, watch.id)} watch={watch} formats={formats} today={todayUk()} back={back} />
 
       {/* Deleting takes two taps: open this, then confirm. Works without JavaScript. */}
       <details className="rounded-lg border border-red-200 p-3 dark:border-red-900">

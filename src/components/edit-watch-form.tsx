@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { updateWatch, type EditWatchState } from "@/app/watches/[id]/actions";
+import type { EditWatchState } from "@/app/watches/[id]/actions";
 import type { WatchDetail } from "@/db/queries";
 
 const field =
@@ -10,8 +10,16 @@ const field =
 
 type Format = { id: number; name: string; kind: string };
 
-export function EditWatchForm({ watch, formats, today, back }: { watch: WatchDetail; formats: Format[]; today: string; back: string }) {
-  const [state, action, pending] = useActionState<EditWatchState, FormData>(updateWatch.bind(null, watch.id), {});
+/**
+ * `save` is the update action already bound to this watch on the server page.
+ * Binding it here instead (a new server reference every render) crashed the
+ * dev server when re-rendering a validation error.
+ */
+export function EditWatchForm({ save, watch, formats, today, back }: {
+  save: (prev: EditWatchState, form: FormData) => Promise<EditWatchState>;
+  watch: WatchDetail; formats: Format[]; today: string; back: string;
+}) {
+  const [state, action, pending] = useActionState<EditWatchState, FormData>(save, {});
   const kinds = ["disc", "cinema", "streaming", "tv", "download", "other"];
 
   return (
