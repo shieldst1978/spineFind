@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from ".";
 import { matchKey, normaliseTitle } from "@/lib/match-key";
 import { searchMovies, tmdbEnabled } from "@/lib/tmdb";
@@ -21,10 +21,12 @@ export type FilmSuggestion = {
  */
 export async function findFilmSuggestions(query: string): Promise<FilmSuggestion[]> {
   const q = query.trim();
-  if (q.length < 2) return [];
+  if (!q) return [];
+  // Short titles (X, M, It, Up) are real films: TMDB searches from one letter
+  // and ranks exact matches first; your own films only match exactly.
   const [yours, tmdb] = await Promise.all([
-    localSuggestions(q),
-    tmdbEnabled() && q.length >= 3 ? searchMovies(q).catch(() => []) : Promise.resolve([]),
+    q.length < 3 ? exactLocalSuggestions(q) : localSuggestions(q),
+    tmdbEnabled() ? searchMovies(q).catch(() => []) : Promise.resolve([]),
   ]);
   const byKey = new Map(yours.map((s) => [matchKey(s.title, s.year), s]));
   const extra: FilmSuggestion[] = [];
@@ -49,7 +51,12 @@ export async function findFilmSuggestions(query: string): Promise<FilmSuggestion
     .slice(0, 10);
 }
 
-async function localSuggestions(q: string): Promise<FilmSuggestion[]> {
+/** Your own films whose title is exactly what's been typed (any year). */
+function exactLocalSuggestions(q: string) {
+  return localSuggestions(q, sql`match_key like ${`${normaliseTitle(q)}|%`}`);
+}
+
+async function localSuggestions(q: string, match?: SQL): Promise<FilmSuggestion[]> {
   const r = await db.execute<{ title: string; year: number | null; owned: boolean; watches: number; tmdb_id: number | null; poster_path: string | null }>(sql`
     with mine as (
       select title, release_year, match_key, tmdb_id, false as owned from watches
@@ -61,7 +68,7 @@ async function localSuggestions(q: string): Promise<FilmSuggestion[]> {
         bool_or(owned) as owned, count(*) filter (where not owned)::int as watches,
         max(tmdb_id) as tmdb_id, bool_or(title ilike ${`${q}%`}) as prefix
       from mine
-      where title ilike ${`%${q}%`} or word_similarity(${q}, title) > 0.6
+      where ${match ?? sql`(title ilike ${`%${q}%`} or word_similarity(${q}, title) > 0.6)`}
       group by match_key, release_year
     )
     select g.title, g.year, g.owned, g.watches, g.tmdb_id, f.poster_path

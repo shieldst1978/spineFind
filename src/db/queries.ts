@@ -180,10 +180,10 @@ export async function watchesFor(matchKey: string): Promise<WatchRow[]> {
 export async function getBox(id: string) {
   const r = await db.execute<{
     id: string; title: string; spine_colours: string[]; location: Location;
-    items: { id: string; title: string; year: number | null; format: MediaFormat; watches: number }[] | null;
+    items: { id: string; title: string; year: number | null; format: MediaFormat; tmdbId: number | null; watches: number }[] | null;
   }>(sql`
     select p.id, p.title, p.spine_colours, p.location,
-      (select json_agg(json_build_object('id', i.id, 'title', i.title, 'year', i.release_year, 'format', i.format,
+      (select json_agg(json_build_object('id', i.id, 'title', i.title, 'year', i.release_year, 'format', i.format, 'tmdbId', i.tmdb_id,
           'watches', (select count(*) from watches w where w.match_key = i.match_key)) order by i.position)
        from items i where i.product_id = p.id) as items
     from products p where p.id = ${id}`);

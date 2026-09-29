@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import type { BoxFormState } from "@/app/box/actions";
+import { FilmTitleInput } from "@/components/film-title-input";
 import { Spine } from "@/components/spine";
 import { COLOUR_NAMES } from "@/lib/colours";
 
@@ -10,13 +11,13 @@ const FORMATS = ["4K UltraHD", "Blu Ray", "DVD", "HD DVD"] as const;
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base dark:border-stone-700 dark:bg-stone-900";
 
-type Row = { key: number; id: string; title: string; year: string; format: string };
+type Row = { key: number; id: string; title: string; year: string; format: string; tmdbId: string };
 
 export type BoxFormInitial = {
   title: string;
   colours: string[];
   location: string;
-  items: { id: string; title: string; year: number | null; format: string }[];
+  items: { id: string; title: string; year: number | null; format: string; tmdbId?: number | null }[];
 };
 
 /** The box form for both adding and editing. Existing films carry their id so they're updated, not replaced. */
@@ -39,8 +40,10 @@ export function BoxForm({
   const [location, setLocation] = useState(initial?.location ?? "shelf");
   const [rows, setRows] = useState<Row[]>(() =>
     initial?.items.length
-      ? initial.items.map((it, i) => ({ key: i, id: it.id, title: it.title, year: it.year ? String(it.year) : "", format: it.format }))
-      : [{ key: 0, id: "", title: "", year: "", format: "Blu Ray" }],
+      ? initial.items.map((it, i) => ({
+          key: i, id: it.id, title: it.title, year: it.year ? String(it.year) : "", format: it.format, tmdbId: it.tmdbId ? String(it.tmdbId) : "",
+        }))
+      : [{ key: 0, id: "", title: "", year: "", format: "Blu Ray", tmdbId: "" }],
   );
   const removedExisting = (initial?.items.length ?? 0) - rows.filter((r) => r.id).length;
 
@@ -48,7 +51,7 @@ export function BoxForm({
   const setRow = (key: number, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const addRow = () =>
-    setRows((rs) => [...rs, { key: Math.max(...rs.map((r) => r.key)) + 1, id: "", title: "", year: "", format: rs.at(-1)!.format }]);
+    setRows((rs) => [...rs, { key: Math.max(...rs.map((r) => r.key)) + 1, id: "", title: "", year: "", format: rs.at(-1)!.format, tmdbId: "" }]);
 
   return (
     <form action={action} className="space-y-6">
@@ -90,11 +93,14 @@ export function BoxForm({
         {rows.map((r, i) => (
           <div key={r.key} className="space-y-2 rounded-lg border border-stone-200 p-3 dark:border-stone-800">
             <input type="hidden" name="item_id" value={r.id} />
+            <input type="hidden" name="item_tmdb_id" value={r.tmdbId} />
             <div className="flex items-center gap-2">
-              <input name="item_title" value={r.title} onChange={(e) => setRow(r.key, { title: e.target.value })}
-                className={field} autoComplete="off"
+              {/* Picking a suggestion fills the year and links TMDB; editing by hand unlinks it. */}
+              <FilmTitleInput name="item_title" value={r.title} className={field}
+                onChange={(t) => setRow(r.key, { title: t, tmdbId: "" })}
+                onPick={(s) => setRow(r.key, { title: s.title, year: s.year ? String(s.year) : r.year, tmdbId: s.tmdbId ? String(s.tmdbId) : "" })}
                 placeholder={single ? (title ? `Same as box: ${title}` : "Film title (blank = box title)") : `Film ${i + 1} title`}
-                aria-label={`Film ${i + 1} title`} />
+                ariaLabel={`Film ${i + 1} title`} />
               {!single && (
                 <button type="button" onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
                   className="shrink-0 rounded-lg px-3 py-2 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800"
@@ -102,7 +108,7 @@ export function BoxForm({
               )}
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <input name="item_year" value={r.year} onChange={(e) => setRow(r.key, { year: e.target.value })}
+              <input name="item_year" value={r.year} onChange={(e) => setRow(r.key, { year: e.target.value, tmdbId: "" })}
                 className={field} inputMode="numeric" pattern="[0-9]{4}" maxLength={4} placeholder="Year"
                 aria-label={`Film ${i + 1} release year`} />
               <select name="item_format" value={r.format} onChange={(e) => setRow(r.key, { format: e.target.value })}

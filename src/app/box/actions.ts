@@ -1,10 +1,12 @@
 "use server";
 
-import { and, eq, max, notInArray } from "drizzle-orm";
+import { and, eq, inArray, max, notInArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { items, location as locationEnum, mediaFormat, products } from "@/db/schema";
+import { cacheFilm } from "@/db/films";
+import { films, items, location as locationEnum, mediaFormat, products } from "@/db/schema";
+import { tmdbEnabled } from "@/lib/tmdb";
 import { COLOUR_NAMES } from "@/lib/colours";
 import { parseYear, text, UUID } from "@/lib/form-values";
 import { itemTypeFor } from "@/lib/item-type";
@@ -14,7 +16,7 @@ export type BoxFormState = { error?: string };
 
 type Format = (typeof mediaFormat.enumValues)[number];
 type Location = (typeof locationEnum.enumValues)[number];
-type Row = { id: string | null; title: string; year: number | null; format: Format };
+type Row = { id: string | null; title: string; year: number | null; format: Format; tmdbId: number | null };
 
 /** Reads and checks the box form shared by Add and Edit. */
 function parseBoxForm(form: FormData): { title: string; colours: string[]; location: Location; rows: Row[] } | { error: string } {
@@ -29,6 +31,7 @@ function parseBoxForm(form: FormData): { title: string; colours: string[]; locat
   const titles = form.getAll("item_title").map(text);
   const years = form.getAll("item_year").map(text);
   const formats = form.getAll("item_format").map(text);
+  const tmdbIds = form.getAll("item_tmdb_id").map(text);
 
   const rows: Row[] = [];
   for (let i = 0; i < titles.length; i++) {
@@ -40,10 +43,20 @@ function parseBoxForm(form: FormData): { title: string; colours: string[]; locat
     if ("error" in year) return { error: `"${filmTitle}": ${year.error}` };
     const format = formats[i] as Format;
     if (!mediaFormat.enumValues.includes(format)) return { error: `"${filmTitle}": choose a format.` };
-    rows.push({ id: UUID.test(ids[i] ?? "") ? ids[i] : null, title: filmTitle, year: year.year, format });
+    const tmdbId = /^\d{1,9}$/.test(tmdbIds[i] ?? "") ? Number(tmdbIds[i]) : null;
+    rows.push({ id: UUID.test(ids[i] ?? "") ? ids[i] : null, title: filmTitle, year: year.year, format, tmdbId });
   }
   if (!rows.length) return { error: "A box needs at least one film. To get rid of the whole box, use Delete this box." };
   return { title, colours, location, rows };
+}
+
+/** Stores TMDB details (poster, director, genres) for films picked from suggestions. */
+async function cachePicked(rows: Row[]) {
+  if (!tmdbEnabled()) return;
+  const ids = [...new Set(rows.map((r) => r.tmdbId).filter((id): id is number => id !== null))];
+  if (!ids.length) return;
+  const known = new Set((await db.select({ id: films.tmdbId }).from(films).where(inArray(films.tmdbId, ids))).map((f) => f.id));
+  await Promise.all(ids.filter((id) => !known.has(id)).map((id) => cacheFilm(id)));
 }
 
 function shelfLink(title: string, location: Location, flag: string) {
@@ -70,9 +83,11 @@ export async function addBox(_prev: BoxFormState, form: FormData): Promise<BoxFo
         itemType: itemTypeFor(r.title),
         format: r.format,
         matchKey: matchKey(r.title, r.year),
+        tmdbId: r.tmdbId,
       })),
     );
   });
+  await cachePicked(box.rows);
 
   revalidatePath("/", "layout");
   redirect(shelfLink(box.title, box.location, "added"));
@@ -115,16 +130,18 @@ export async function updateBox(productId: string, _prev: BoxFormState, form: Fo
       };
       const old = r.id ? byId.get(r.id) : undefined;
       if (old) {
-        // A retitled or re-dated film no longer matches its old TMDB entry.
+        // A film picked from suggestions brings its TMDB id; otherwise a retitled
+        // or re-dated film no longer matches its old TMDB entry.
         const sameFilm = old.title === r.title && old.releaseYear === r.year;
-        await tx.update(items).set({ ...values, tmdbId: sameFilm ? old.tmdbId : null }).where(eq(items.id, old.id));
+        await tx.update(items).set({ ...values, tmdbId: r.tmdbId ?? (sameFilm ? old.tmdbId : null) }).where(eq(items.id, old.id));
       } else {
-        await tx.insert(items).values({ ...values, productId, legacyNumber: nextNumber++ });
+        await tx.insert(items).values({ ...values, productId, legacyNumber: nextNumber++, tmdbId: r.tmdbId });
       }
     }
     return true;
   });
   if (!found) return { error: "That box doesn't exist any more." };
+  await cachePicked(box.rows);
 
   revalidatePath("/", "layout");
   redirect(shelfLink(box.title, box.location, "updated"));
