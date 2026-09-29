@@ -14,6 +14,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { createDb } from "../src/db/client";
 import { items, products, reviewFlags, viewingFormats, watches } from "../src/db/schema";
 import { DISC_TO_MEDIA, SEED_FORMATS } from "../src/db/seed-formats";
+import { itemTypeFor } from "../src/lib/item-type";
 import { matchKey, normaliseTitle } from "../src/lib/match-key";
 
 const ROOT = path.resolve(__dirname, "..");
@@ -91,13 +92,6 @@ const MEDIA_FORMATS: Record<string, "4K UltraHD" | "Blu Ray" | "DVD" | "HD DVD">
   hddvd: "HD DVD",
 };
 
-function itemTypeFor(title: string): "film" | "tv_season" | "episode" {
-  // "Season 9 Episode 18" is a TV episode; "Star Wars: Episode IV" is a film.
-  if (/\bseason\b.*\bepisode\b/i.test(title)) return "episode";
-  if (/\b(season|series)\b/i.test(title)) return "tv_season";
-  return "film";
-}
-
 /** watched_status is stored as TRUE/FALSE in Excel; accept 1/0 too. */
 function toFlag(v: Cell): boolean {
   return v === true || ["1", "true", "yes"].includes(clean(v).toLowerCase());
@@ -109,6 +103,51 @@ async function main() {
 
   const { client, db } = createDb();
   await migrate(db, { migrationsFolder: path.join(ROOT, "drizzle") });
+
+  // ---- safety: don't wipe titles added in the app that the spreadsheet lacks
+  const sfRows = await readSheet(SPINEFIND_XLSX);
+  const sheetNumbers = sfRows.map((r) => Number(clean(r.get("number"))));
+  const appOnly = await client.query<{ legacy_number: number; title: string; box: string }>(
+    `select i.legacy_number, i.title, p.title as box from items i join products p on p.id = i.product_id
+     where not (i.legacy_number = any($1::int[])) order by i.legacy_number`,
+    [sheetNumbers],
+  );
+  const appWatches = await client.query<{ watched_on: string; title: string; format: string }>(
+    `select w.watched_on::text as watched_on, w.title, f.name as format
+     from watches w join viewing_formats f on f.id = w.format_id
+     where w.legacy_row is null order by w.watched_on`,
+  );
+  // Flags that differ from the spreadsheet (toggling on then off again is no change).
+  const sheetSeen = sfRows.filter((r) => toFlag(r.get("watched_status"))).map((r) => Number(clean(r.get("number"))));
+  const appFlags = await client.query<{ legacy_number: number; title: string; seen: boolean }>(
+    `select legacy_number, title, watched_before_logging as seen from items
+     where legacy_number = any($1::int[])
+       and watched_before_logging <> (legacy_number = any($2::int[]))
+     order by legacy_number`,
+    [sheetNumbers, sheetSeen],
+  );
+  const pending = appOnly.rows.length + appWatches.rows.length + appFlags.rows.length;
+  if (pending && !process.argv.includes("--force")) {
+    const lines = [
+      `Stopped: the app has changes that aren't in the spreadsheets yet, and importing would lose them.`,
+      `Copy them across first, or run "npm run import -- --force" to discard them.`,
+    ];
+    if (appOnly.rows.length) {
+      lines.push(``, `Titles added in the app (add to ${path.basename(SPINEFIND_XLSX)} with these numbers):`);
+      lines.push(...appOnly.rows.map((r) => `  ${r.legacy_number}  ${r.title}  [${r.box}]`));
+    }
+    if (appWatches.rows.length) {
+      lines.push(``, `Watches logged in the app (add to ${path.basename(WATCHES_XLSX)}):`);
+      lines.push(...appWatches.rows.map((r) => `  ${r.watched_on}  ${r.title}  (${r.format})`));
+    }
+    if (appFlags.rows.length) {
+      lines.push(``, `watched_status changed in the app:`);
+      lines.push(...appFlags.rows.map((r) => `  ${r.legacy_number}  ${r.title} -> ${r.seen ? "TRUE" : "FALSE"}`));
+    }
+    console.error(lines.join("\n"));
+    await client.close();
+    process.exit(2);
+  }
 
   await db.execute(sql`truncate review_flags, watches, items, products, viewing_formats restart identity cascade`);
 
@@ -125,7 +164,6 @@ async function main() {
   }
 
   // ---- catalogue
-  const sfRows = await readSheet(SPINEFIND_XLSX);
   sfRows.sort((a, b) => Number(clean(a.get("number"))) - Number(clean(b.get("number"))));
 
   // One product per distinct product title + spine colours. Same title with

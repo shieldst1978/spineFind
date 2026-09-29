@@ -8,6 +8,13 @@
       "when": 1790617656547,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790666498881,
+      "tag": "0001_enable_pg_trgm",
+      "breakpoints": true
     }
   ]
 }

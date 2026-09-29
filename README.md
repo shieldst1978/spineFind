@@ -21,6 +21,10 @@ The source of truth for now is the two spreadsheets in the project folder. They'
 
 `npm run import` wipes the database and rebuilds it from these files, then writes `reports/import-report.md`: counts, watched-status changes and anything to review. Re-run it whenever you edit the spreadsheets.
 
+**Titles added in the app** (with **+ Add**) aren't written back to the spreadsheet yet; that comes with the OneDrive sync. The import refuses to run while the app holds titles the spreadsheet lacks, and lists them with their numbers so you can copy them across. `npm run import -- --force` discards them instead.
+
+**Stop the dev server before running the import.** PGlite allows only one process at a time to open the `.pglite` folder.
+
 See [docs/schema.md](docs/schema.md) for the data model and import rules.
 
 ## Scripts
