@@ -8,6 +8,13 @@ const nextConfig: NextConfig = {
     return [
       // The bare domain has nothing else on it (yet), so send visitors to the app.
       { source: "/", destination: BASE_PATH, basePath: false, permanent: false },
+      // iPhones also look for the home screen icon at the site root.
+      ...["/apple-touch-icon.png", "/apple-touch-icon-precomposed.png"].map((source) => ({
+        source,
+        destination: `${BASE_PATH}/apple-icon.png`,
+        basePath: false as const,
+        permanent: false,
+      })),
       // A server action's redirect() in a plain (pre-JavaScript) form post is sent
       // without the base path, e.g. "/watches?logged=…". Catch those and put the
       // prefix back; with JavaScript running, Next adds it itself.

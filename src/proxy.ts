@@ -8,7 +8,13 @@ import { NextResponse, type NextRequest } from "next/server";
  * anyone not listed in AUTH_ALLOWED_USERS (comma-separated emails). With that
  * variable unset, as in local development, every request is allowed.
  */
+// App icons are fetched by the phone's home screen without the sign-in cookie,
+// so they must be reachable without signing in. They reveal nothing private.
+const PUBLIC_ICON = /\/(icon\.svg|apple-icon\.png|apple-touch-icon(-precomposed)?\.png)$/;
+
 export function proxy(request: NextRequest) {
+  if (PUBLIC_ICON.test(request.nextUrl.pathname)) return NextResponse.next();
+
   const allowed = (process.env.AUTH_ALLOWED_USERS ?? "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
