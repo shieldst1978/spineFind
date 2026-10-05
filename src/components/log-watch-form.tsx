@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 import { addWatch, type FilmSuggestion, type LogWatchState } from "@/app/watches/actions";
 import { FilmTitleInput } from "@/components/film-title-input";
+import { DISC_TO_MEDIA } from "@/db/seed-formats";
 
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base dark:border-stone-700 dark:bg-stone-900";
@@ -24,11 +25,21 @@ export function LogWatchForm({ formats, today }: { formats: Format[]; today: str
   const [year, setYear] = useState("");
   const [formatId, setFormatId] = useState(String(formats.find((f) => f.kind !== "disc")?.id ?? formats[0]?.id ?? ""));
   const [picked, setPicked] = useState<FilmSuggestion | null>(null);
+  const [autoFormat, setAutoFormat] = useState<string | null>(null);
 
   const pick = (s: FilmSuggestion) => {
     setTitle(s.title);
     setYear(s.year ? String(s.year) : "");
     setPicked(s);
+    // A film you own: assume you watched your copy (4K UltraHD -> "4K Blu Ray").
+    const discName = s.ownedFormat ? Object.entries(DISC_TO_MEDIA).find(([, media]) => media === s.ownedFormat)?.[0] : undefined;
+    const disc = discName ? formats.find((f) => f.name === discName) : undefined;
+    if (disc) {
+      setFormatId(String(disc.id));
+      setAutoFormat(disc.name);
+    } else {
+      setAutoFormat(null);
+    }
   };
 
   const byKind = (kind: string) => formats.filter((f) => f.kind === kind);
@@ -50,7 +61,11 @@ export function LogWatchForm({ formats, today }: { formats: Format[]; today: str
         </div>
         <input type="hidden" name="tmdb_id" value={picked?.tmdbId ?? ""} />
         {picked?.owned && (
-          <p className="text-xs text-emerald-700 dark:text-emerald-400">On your shelf: a disc format marks your copy as watched.</p>
+          <p className="text-xs text-emerald-700 dark:text-emerald-400">
+            {autoFormat
+              ? `You own this on ${picked.ownedFormat}, so Where is set to ${autoFormat}. Change it if you watched it another way.`
+              : "On your shelf: a disc format marks your copy as watched."}
+          </p>
         )}
       </div>
 
@@ -69,7 +84,7 @@ export function LogWatchForm({ formats, today }: { formats: Format[]; today: str
 
       <label className="block space-y-1">
         <span className="text-sm font-medium">Where</span>
-        <select name="format_id" value={formatId} onChange={(e) => setFormatId(e.target.value)} className={field}>
+        <select name="format_id" value={formatId} onChange={(e) => { setFormatId(e.target.value); setAutoFormat(null); }} className={field}>
           {groups.filter(([, fs]) => fs.length).map(([label, fs]) => (
             <optgroup key={label} label={label}>
               {fs.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
