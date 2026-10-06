@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Spine } from "@/components/spine";
-import { getItem, listViewingFormats, watchesFor } from "@/db/queries";
+import { filmInfo, getItem, listViewingFormats, watchesFor, type FilmInfo } from "@/db/queries";
 import { DISC_TO_MEDIA } from "@/db/seed-formats";
+import { normaliseTitle } from "@/lib/match-key";
 import { logWatch, setSeenBefore } from "./actions";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -29,7 +31,11 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
-  const [history, formats] = await Promise.all([watchesFor(item.matchKey), listViewingFormats()]);
+  const [history, formats, info] = await Promise.all([
+    watchesFor(item.filmKey),
+    listViewingFormats(),
+    item.tmdbId ? filmInfo(item.tmdbId) : null,
+  ]);
   const isFilm = item.itemType === "film";
   const discWatches = history.filter((w) => w.kind === "disc");
   // Default to the disc format matching this copy (4K UltraHD -> 4K Blu Ray).
@@ -67,6 +73,8 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
       <section className="rounded-lg border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
         <Status item={item} discWatches={discWatches.length} lastDisc={discWatches[0]?.watchedOn} />
       </section>
+
+      {info && <AboutFilm info={info} title={item.title} />}
 
       {(logged || sp.updated || sp.deleted) && (
         <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
@@ -138,6 +146,42 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
         </section>
       )}
     </main>
+  );
+}
+
+/** TMDB details: who made it, who's in it, and the other titles it goes by. */
+function AboutFilm({ info, title }: { info: FilmInfo; title: string }) {
+  // Other titles, skipping yours and repeats (UK first, then TMDB's own, original, US …).
+  const seen = new Set([normaliseTitle(title)]);
+  const aka = info.titles.filter((t) => !seen.has(normaliseTitle(t.title)) && seen.add(normaliseTitle(t.title))).slice(0, 4);
+  const facts = [
+    info.ukCertificate,
+    info.runtimeMinutes && `${info.runtimeMinutes} min`,
+    info.ukReleaseDate && `UK release ${formatDate(info.ukReleaseDate)}`,
+  ].filter(Boolean);
+  return (
+    <section className="flex gap-3 rounded-lg border border-stone-200 bg-white p-4 text-sm dark:border-stone-800 dark:bg-stone-900">
+      {info.posterPath && (
+        <Image src={`https://image.tmdb.org/t/p/w185${info.posterPath}`} alt="" width={72} height={108}
+          className="h-[108px] w-[72px] shrink-0 rounded object-cover" />
+      )}
+      <div className="min-w-0 space-y-1.5">
+        {info.directors.length > 0 && <p><span className="text-stone-500">Directed by</span> {info.directors.join(", ")}</p>}
+        {info.cast.length > 0 && <p><span className="text-stone-500">With</span> {info.cast.map((c) => c.name).join(", ")}</p>}
+        {(info.genres.length > 0 || facts.length > 0) && (
+          <p className="text-stone-600 dark:text-stone-400">{[...info.genres, ...facts].join(" · ")}</p>
+        )}
+        {info.collectionName && <p className="text-stone-600 dark:text-stone-400">Part of {info.collectionName}</p>}
+        {aka.length > 0 && (
+          <p className="text-stone-600 dark:text-stone-400">
+            Also known as{" "}
+            {aka.map((t, i) => (
+              <span key={t.title}>{i > 0 && ", "}<em>{t.title}</em>{t.country && t.kind === "alternative" && ` (${t.country === "GB" ? "UK" : t.country})`}</span>
+            ))}
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 

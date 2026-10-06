@@ -24,11 +24,12 @@ A personal catalogue of the films on my shelves, searchable by spine colour, and
 | **Shelf** | `/spinefind` | Find a box by title (typo-tolerant) or by the spine colours you can see; filter by format, location (shelf / loft / gone) and watched status. Each box is drawn as a spine in its colours. |
 | **Add** | `/spinefind/add` | Add a box: its films first (with TMDB suggestions), then the box title (defaults to the first film), spine colours and where it's kept. One form covers single films and box sets. |
 | **Box edit** | `/spinefind/box/<id>` | Change a box's title, spine, location and films (fix, add, remove); delete the box with a two-tap confirmation. |
-| **Film page** | `/spinefind/item/<id>` | A film in a box: watched status, "I watched this" (defaults to the copy's disc format), "Seen before, no date", watch history with edit links. |
+| **Film page** | `/spinefind/item/<id>` | A film in a box: watched status, TMDB details (director, top cast, genres, UK certificate and release date, "also known as"), "I watched this" (defaults to the copy's disc format), "Seen before, no date", watch history with edit links. |
 | **Watches** | `/spinefind/watches` | The watch log as a table: release decade, age when watched, rewatch count ("2nd of 6"), owned copy, format. Filter, sort, page; summary cards for the filtered set. |
 | **Log a watch** | `/spinefind/watches/new` | Log any film, owned or not. Suggestions come from your log, shelf and TMDB; picking a film you own sets the format to your copy. New viewing formats can be added inline. |
 | **Watch edit** | `/spinefind/watches/<id>` | Correct a watch's title, year, date or format, or delete it (two taps). Works for imported watches too. |
 | **Pick** | `/spinefind/pick` | Choose a film to watch at random: unwatched / rewatch / anything, by decade (or a random "surprise" decade), format, spine colour, "not seen in N years". Shows TMDB details and which spine to look for. |
+| **Review** | `/spinefind/review` | Films the TMDB matcher wasn't sure about, most-used first: pick the right one (optionally correcting your year to TMDB's), search TMDB yourself, or say "None of these". |
 
 ## How it fits together
 
@@ -76,7 +77,7 @@ A request, end to end: Safari asks for `/spinefind/watches`. Azure's sign-in lay
 | Database | **PostgreSQL**: **Neon** (hosted, free plan) | `pg_trgm` for fuzzy title search. Production and dev are separate Neon branches. |
 | ORM | **Drizzle ORM** + drizzle-kit | Schema in TypeScript, SQL migrations in `drizzle/`. Complex reads are written as SQL through `db.execute(sql\`…\`)`. |
 | Local DB fallback | **PGlite** (Postgres in WebAssembly) | Used only when `DATABASE_URL` isn't set. Fragile (see [Gotchas](#gotchas)); normally unused now. |
-| Film data | **TMDB API** | Search, details (director, genres, runtime, IMDb id), posters. Cached in the `films` table. |
+| Film data | **TMDB API** | Search, full records (top 10 billed cast, key crew, genres, keywords, UK certificate and release date, alternative titles, collection, IMDb id), posters. Stored in `films`, `people`, `film_credits`, `film_titles`. |
 | Spreadsheet import | **ExcelJS** + `tsx` | One-off/rebuild import from the original `.xlsx` files. |
 | Hosting | **Azure Container Apps** (consumption plan) | Scales 0–1 replicas; awake 7am–midnight UK time, wakes on demand otherwise. |
 | Sign-in | **Container Apps authentication** with **Microsoft Entra ID** | App registration "SpineFind", assignment required, only Tim assigned. |
@@ -98,6 +99,7 @@ src/
     watches/new/page.tsx        Log a watch; watches/actions.ts: addWatch, suggestFilms
     watches/[id]/page.tsx       Edit / delete a watch; watches/[id]/actions.ts: updateWatch, deleteWatch
     pick/page.tsx               Pick a film
+    review/page.tsx             Review TMDB matches; review/actions.ts: confirmMatch, rejectMatch
     icon.svg, apple-icon.png    Browser and Home Screen icons (public, bypass sign-in)
   components/                   Client-side pieces
     box-form.tsx                The Add/Edit box form (films first, box title follows the first film)
@@ -112,21 +114,25 @@ src/
     client.ts                   createDb(): node-postgres when DATABASE_URL is set, else PGlite; migrations
     index.ts                    Lazy shared db/client (never opened at build time); closes cleanly on shutdown
     queries.ts                  Read queries: shelf search, watch log with derived columns, film/box/watch detail, pick, decades
-    suggestions.ts              Title suggestions: your films (exact/fuzzy) merged with TMDB results
-    films.ts                    TMDB cache: cacheFilm(), detailsForItem() (confident title+year match only)
+    suggestions.ts              Title suggestions: your films (exact/fuzzy/other titles) merged with TMDB results
+    films.ts                    cacheFilm() (full TMDB record), detailsForItem() (confident title+year match only)
+    film-link.ts                linkTmdbId(): a saved film inherits its title+year's TMDB link; enrichFilms()
+    enrich.ts                   storeFilm(): writes a full TMDB record (film, people, credits, titles)
     seed-formats.ts             Starting viewing formats and aliases; disc → media format mapping
   lib/
     match-key.ts                Title normalisation and the title+year matching key
     item-type.ts                Film / TV season / episode classification from a title
     form-values.ts              Shared form parsing: text, year, date (blank = today), UUID
-    tmdb.ts                     TMDB API client (search, details)
+    tmdb.ts                     TMDB API client (search, details, full record, titles, UK release year); retries on 429/5xx
+    tmdb-match.ts               matchFilm(): the matching rules (see TMDB enrichment)
     colours.ts                  Spine colour names and swatches
     base-path.ts                /spinefind and withBase() for plain HTML form actions
   proxy.ts                      Allowed-user check behind Azure sign-in; icons are public
 scripts/
   import.ts                     Rebuild a database from the two spreadsheets, with a report
+  enrich.ts                     Match every film to TMDB and store its full record (see TMDB enrichment)
   start.mjs                     Container entry point: run migrations, then start Next
-drizzle/                        SQL migrations (0000 init, 0001 pg_trgm + trigram indexes)
+drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key)
 docs/schema.md                  Original data-model design notes (schema.ts is authoritative)
 Dockerfile, .dockerignore       Container image build (personal data and secrets excluded)
 .github/workflows/build.yml     Build and push the image on every push to main
@@ -137,19 +143,24 @@ Dockerfile, .dockerignore       Container image build (personal data and secrets
 | Table | What a row is | Notable columns |
 |---|---|---|
 | `products` | A **box** on the shelf: the spine you look for | `title`, `spine_colours` (1–3, main first), `location` (shelf / loft / gone) |
-| `items` | A **film, TV season or episode** inside a box | `format` (4K UltraHD / Blu Ray / DVD / HD DVD), `release_year`, `item_type`, `watched_before_logging`, `match_key`, `tmdb_id`, `legacy_number` (spreadsheet row) |
-| `watches` | One **viewing** | `watched_on`, `format_id`, `format_from_memory` (aNote era), `match_key`, `tmdb_id`, `legacy_row` (null = logged in the app) |
+| `items` | A **film, TV season or episode** inside a box | `format` (4K UltraHD / Blu Ray / DVD / HD DVD), `release_year`, `item_type`, `watched_before_logging`, `match_key`, `tmdb_id`, `film_key`, `legacy_number` (spreadsheet row) |
+| `watches` | One **viewing** | `watched_on`, `format_id`, `format_from_memory` (aNote era), `match_key`, `tmdb_id`, `film_key`, `legacy_row` (null = logged in the app) |
 | `viewing_formats` | Where you watched (Sky, Cinema, Blu Ray…) | `kind` (disc / cinema / streaming / tv / download / other), `aliases` |
-| `films` | TMDB details, fetched once | `directors`, `genres`, `runtime_minutes`, `poster_path`, `imdb_id` |
+| `films` | A TMDB film's details | `directors`, `genres`, `keywords`, `countries`, `runtime_minutes`, `uk_certificate`, `uk_release_date`, `collection_name`, `vote_average`, `poster_path`, `imdb_id`, `enriched_at` |
+| `people` | An actor or crew member | `name`, `profile_path` |
+| `film_credits` | Who did what on a film | `role` (cast / crew), `job` (Director, Screenplay, Original Music Composer…), `character`, `billing` (cast order, top 10) |
+| `film_titles` | Every title a film goes by | `kind` (tmdb / original / alternative), `country` (GB, US…) |
+| `tmdb_matches` | The matcher's answer per title + year as entered | `status` (auto / review / confirmed / rejected / unmatched), `tmdb_id`, `method` (why), `candidates` |
 | `review_flags` | Things the import wants checked | `kind`, `status` |
 | `item_watch_status` (view) | Watched status per item | see below |
 
 ## Key rules
 
-- **Films and watches link by title + year**, not by id: `match_key` = normalised title + `|` + year. Normalising ignores case, accents, punctuation, spacing and a leading or trailing "The/A/An", and treats `&` as "and". A watch of "Godfather, The (1972)" matches a box copy of "The Godfather (1972)".
-- **Watched status is calculated, never stored.** A film counts as watched if it was flagged "seen before logging", or if it has a watch with the same `match_key` in a **disc** format. TV items show as not applicable.
+- **Which film is it?** Every box entry and watch has a `film_key`: `tmdb:<id>` once linked to TMDB, otherwise its `match_key` (normalised title + `|` + year). Normalising ignores case, accents, punctuation, spacing and a leading or trailing "The/A/An", and treats `&` as "and" (the TMDB matcher also reads Roman numerals after the first word as numbers). Joins, watch history and rewatch counts all go through `film_key`, so "Avengers Assemble" and "The Avengers (2012)" are one film, and two different films that share a title and year stay apart.
+- **Your title is kept.** The app always shows the title as you entered it (as on the spine, or as you watched it). TMDB's title and the alternatives are used for search and shown as "also known as": searching "Midnight Sting" finds Diggstown.
+- **Watched status is calculated, never stored.** A film counts as watched if it was flagged "seen before logging", or if it has a watch of the same film (`film_key`) in a **disc** format. TV items show as not applicable.
 - **Box sets:** one `products` row with several `items`, each with its own year and format.
-- **TMDB links are cautious.** A film only gets a `tmdb_id` when you pick it from a suggestion, or when an automatic lookup finds an exact title **and** year match. Editing a title or year by hand drops the link.
+- **TMDB links are cautious.** A film gets a `tmdb_id` when you pick it from a suggestion, when the matcher is sure (see below), or when you confirm it on the Review page. A film typed without picking inherits the link of the same title + year already in the app. Editing a title or year by hand drops the old link (and takes the new title + year's link, if any).
 - **Deleting a box** deletes its items but never watches: watches belong to the log.
 
 ## Environments and configuration
@@ -181,7 +192,7 @@ npm run typecheck    # generates Next's route types, then tsc
 npm run lint
 ```
 
-Changing the schema: edit `src/db/schema.ts`, run `npm run db:generate`, and commit the new file in `drizzle/`. Migrations run automatically when the container starts.
+Changing the schema: edit `src/db/schema.ts`, run `npm run db:generate`, and commit the new file in `drizzle/`. Migrations run automatically when the container starts (and when `scripts/enrich.ts` or `scripts/import.ts` run).
 
 Write tests against the **dev** branch only. Before anything that saves, check `DATABASE_URL` and `NEON_PROD_DATABASE_URL` point at different hosts. To refresh dev from live, create a new dev branch from production in the Neon console and update `DATABASE_URL`.
 
@@ -216,6 +227,28 @@ Pages left open across a deploy reload themselves: the build carries a deploymen
 - Rules it applies: rows group into a box by product title + spine colours; "Season/Series" titles become TV seasons; `watched_status` becomes "seen before logging"; format spellings fold into `viewing_formats`; watches before 23 Jan 2026 are marked "format from memory" (aNote era).
 
 A OneDrive sync to write app changes back to the spreadsheets is planned but not built.
+
+## TMDB enrichment
+
+`scripts/enrich.ts` matches every film as entered (one per `match_key`) to TMDB, stores the full record for each match, and links items and watches to it. Films added later are enriched when they're saved.
+
+```sh
+# with DATABASE_URL set (dev branch unless you mean otherwise)
+npx tsx --conditions=react-server scripts/enrich.ts --cloud [--dry-run] [--rematch] [--refresh] [--production]
+```
+
+- `--dry-run` matches without saving and writes `reports/tmdb-dry-run.md`. `--rematch` re-checks everything except your decisions; `--refresh` re-fetches stored films. It refuses the production database unless `--production` is given.
+- It never overwrites a **confirmed** or **rejected** match, so it's safe to re-run.
+- Matching rules, in order (UK release year is the first choice for "the year"):
+  1. One film with exactly your title and year → linked automatically.
+  2. **Several films share the title and year → always your call** (Review page, best known first).
+  3. No year recorded → review.
+  4. Exact title whose **UK** release year is your year → automatic if there's only one.
+  5. Year out by one → review. Released that year somewhere else → review.
+  6. Known by another English title (UK, US, IE, AU, CA, NZ) or its original title, same year → automatic if only one; otherwise review.
+  7. Same title, very different year, or a similar title (typos, subtitles, "Part 2" vs "II") → review.
+  8. Nothing close → "not found"; the five nearest results are kept for the Review page.
+- Rows that already carried one `tmdb_id` (picked in the app) are kept as **confirmed**, "already linked".
 
 ## Gotchas
 

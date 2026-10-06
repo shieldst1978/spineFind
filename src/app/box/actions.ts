@@ -1,12 +1,11 @@
 "use server";
 
-import { and, eq, inArray, max, notInArray } from "drizzle-orm";
+import { and, eq, max, notInArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { cacheFilm } from "@/db/films";
-import { films, items, location as locationEnum, mediaFormat, products } from "@/db/schema";
-import { tmdbEnabled } from "@/lib/tmdb";
+import { enrichFilms, linkTmdbId } from "@/db/film-link";
+import { items, location as locationEnum, mediaFormat, products } from "@/db/schema";
 import { COLOUR_NAMES } from "@/lib/colours";
 import { parseYear, text, UUID } from "@/lib/form-values";
 import { itemTypeFor } from "@/lib/item-type";
@@ -50,14 +49,8 @@ function parseBoxForm(form: FormData): { title: string; colours: string[]; locat
   return { title, colours, location, rows };
 }
 
-/** Stores TMDB details (poster, director, genres) for films picked from suggestions. */
-async function cachePicked(rows: Row[]) {
-  if (!tmdbEnabled()) return;
-  const ids = [...new Set(rows.map((r) => r.tmdbId).filter((id): id is number => id !== null))];
-  if (!ids.length) return;
-  const known = new Set((await db.select({ id: films.tmdbId }).from(films).where(inArray(films.tmdbId, ids))).map((f) => f.id));
-  await Promise.all(ids.filter((id) => !known.has(id)).map((id) => cacheFilm(id)));
-}
+/** Each film's TMDB link: picked from suggestions, or inherited from the same title + year already in the app. */
+const linkRows = (rows: Row[]) => Promise.all(rows.map((r) => linkTmdbId(r.title, r.year, r.tmdbId)));
 
 function shelfLink(title: string, location: Location, flag: string) {
   const p = new URLSearchParams({ q: title, [flag]: "1" });
@@ -68,6 +61,7 @@ function shelfLink(title: string, location: Location, flag: string) {
 export async function addBox(_prev: BoxFormState, form: FormData): Promise<BoxFormState> {
   const box = parseBoxForm(form);
   if ("error" in box) return box;
+  const linked = await linkRows(box.rows);
 
   await db.transaction(async (tx) => {
     const [{ next }] = await tx.select({ next: max(items.legacyNumber) }).from(items);
@@ -83,11 +77,11 @@ export async function addBox(_prev: BoxFormState, form: FormData): Promise<BoxFo
         itemType: itemTypeFor(r.title),
         format: r.format,
         matchKey: matchKey(r.title, r.year),
-        tmdbId: r.tmdbId,
+        tmdbId: linked[i],
       })),
     );
   });
-  await cachePicked(box.rows);
+  await enrichFilms(linked);
 
   revalidatePath("/", "layout");
   redirect(shelfLink(box.title, box.location, "added"));
@@ -98,6 +92,7 @@ export async function updateBox(productId: string, _prev: BoxFormState, form: Fo
   if (!UUID.test(productId)) return { error: "That box doesn't exist." };
   const box = parseBoxForm(form);
   if ("error" in box) return box;
+  const linked = await linkRows(box.rows);
 
   const found = await db.transaction(async (tx) => {
     const [p] = await tx
@@ -133,15 +128,15 @@ export async function updateBox(productId: string, _prev: BoxFormState, form: Fo
         // A film picked from suggestions brings its TMDB id; otherwise a retitled
         // or re-dated film no longer matches its old TMDB entry.
         const sameFilm = old.title === r.title && old.releaseYear === r.year;
-        await tx.update(items).set({ ...values, tmdbId: r.tmdbId ?? (sameFilm ? old.tmdbId : null) }).where(eq(items.id, old.id));
+        await tx.update(items).set({ ...values, tmdbId: r.tmdbId ?? (sameFilm ? old.tmdbId : null) ?? linked[i] }).where(eq(items.id, old.id));
       } else {
-        await tx.insert(items).values({ ...values, productId, legacyNumber: nextNumber++, tmdbId: r.tmdbId });
+        await tx.insert(items).values({ ...values, productId, legacyNumber: nextNumber++, tmdbId: linked[i] });
       }
     }
     return true;
   });
   if (!found) return { error: "That box doesn't exist any more." };
-  await cachePicked(box.rows);
+  await enrichFilms(linked);
 
   revalidatePath("/", "layout");
   redirect(shelfLink(box.title, box.location, "updated"));

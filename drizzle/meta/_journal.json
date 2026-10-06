@@ -15,6 +15,20 @@
       "when": 1790666498881,
       "tag": "0001_enable_pg_trgm",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791223721010,
+      "tag": "0002_tmdb_enrichment",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791295553480,
+      "tag": "0003_film_key",
+      "breakpoints": true
     }
   ]
 }

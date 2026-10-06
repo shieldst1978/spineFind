@@ -5,10 +5,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { formatKind, viewingFormats, watches } from "@/db/schema";
-import { cacheFilm } from "@/db/films";
+import { enrichFilms, linkTmdbId } from "@/db/film-link";
 import { findFilmSuggestions, type FilmSuggestion } from "@/db/suggestions";
 import { matchKey } from "@/lib/match-key";
-import { tmdbEnabled } from "@/lib/tmdb";
 
 export type LogWatchState = { error?: string };
 export type { FilmSuggestion };
@@ -61,10 +60,9 @@ export async function addWatch(_prev: LogWatchState, form: FormData): Promise<Lo
     formatId = f.id;
   }
 
-  // A TMDB pick brings its ID; store the film's details (directors, genres) for stats.
+  // A TMDB pick brings its ID; a typed title inherits the link of the same film already logged.
   const tmdbText = text(form.get("tmdb_id"));
-  const tmdbId = /^\d+$/.test(tmdbText) ? Number(tmdbText) : null;
-  if (tmdbId && tmdbEnabled()) await cacheFilm(tmdbId);
+  const tmdbId = await linkTmdbId(title, year, /^\d+$/.test(tmdbText) ? Number(tmdbText) : null);
 
   await db.insert(watches).values({
     title,
@@ -75,6 +73,8 @@ export async function addWatch(_prev: LogWatchState, form: FormData): Promise<Lo
     matchKey: matchKey(title, year),
     tmdbId,
   });
+  // Cast, crew and genres for stats.
+  await enrichFilms([tmdbId]);
 
   revalidatePath("/");
   revalidatePath("/watches");

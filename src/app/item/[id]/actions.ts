@@ -36,6 +36,7 @@ export async function logWatch(itemId: string, form: FormData) {
     formatId: format.id,
     formatFromMemory: false,
     matchKey: item.matchKey,
+    tmdbId: item.tmdbId,
   });
   back(itemId, { logged: watchedOn });
 }

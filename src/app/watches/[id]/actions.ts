@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
+import { linkTmdbId } from "@/db/film-link";
 import { viewingFormats, watches } from "@/db/schema";
 import { parseWatchDate, parseYear, text, UUID } from "@/lib/form-values";
 import { matchKey } from "@/lib/match-key";
@@ -46,8 +47,8 @@ export async function updateWatch(watchId: string, _prev: EditWatchState, form: 
       // Choosing the format now confirms it, even for an aNote-era watch.
       formatFromMemory: format.id === current.formatId ? current.formatFromMemory : false,
       matchKey: matchKey(title, year.year),
-      // A different film no longer matches the old TMDB entry.
-      tmdbId: sameFilm ? current.tmdbId : null,
+      // A different film no longer matches the old TMDB entry; it takes that film's link, if it has one.
+      tmdbId: sameFilm ? current.tmdbId : await linkTmdbId(title, year.year, null),
       updatedAt: new Date(),
     })
     .where(eq(watches.id, watchId));

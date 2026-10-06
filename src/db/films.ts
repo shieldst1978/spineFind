@@ -1,29 +1,17 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from ".";
+import { storeFilm } from "./enrich";
 import { films, items } from "./schema";
 import { normaliseTitle } from "@/lib/match-key";
-import { getMovie, searchMovies, tmdbEnabled } from "@/lib/tmdb";
+import { getMovieFull, searchMovies, tmdbEnabled } from "@/lib/tmdb";
 
 export type FilmDetails = typeof films.$inferSelect;
 
-/** Fetches a film's TMDB details and stores them. Returns false if TMDB couldn't be reached. */
+/** Fetches a film's full TMDB record (details, cast, crew, titles) and stores it. Returns false if TMDB couldn't be reached. */
 export async function cacheFilm(tmdbId: number): Promise<boolean> {
   try {
-    const m = await getMovie(tmdbId);
-    const values = {
-      tmdbId: m.tmdbId,
-      imdbId: m.imdbId,
-      title: m.title,
-      originalTitle: m.originalTitle,
-      releaseDate: m.releaseDate,
-      runtimeMinutes: m.runtimeMinutes,
-      directors: m.directors,
-      genres: m.genres,
-      posterPath: m.posterPath,
-      fetchedAt: new Date(),
-    };
-    await db.insert(films).values(values).onConflictDoUpdate({ target: films.tmdbId, set: values });
+    await storeFilm(db, await getMovieFull(tmdbId));
     return true;
   } catch (e) {
     console.error("TMDB lookup failed", tmdbId, e);

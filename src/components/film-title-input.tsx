@@ -99,6 +99,7 @@ export function FilmTitleInput({
                 <span className="min-w-0 flex-1 truncate">
                   {s.title}
                   {s.year && <span className="text-stone-500"> ({s.year})</span>}
+                  {s.alsoKnownAs && <span className="block truncate text-xs text-stone-500">aka {s.alsoKnownAs}</span>}
                 </span>
                 {s.owned && <span className="rounded bg-emerald-100 px-1.5 text-xs text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200">owned</span>}
                 {s.watches > 0 && <span className="text-xs text-stone-500">{s.watches}× watched</span>}

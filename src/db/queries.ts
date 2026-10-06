@@ -59,7 +59,10 @@ export async function searchShelf(f: ShelfFilters): Promise<{ products: ShelfPro
       p.title ilike ${like}
       or word_similarity(${q}, p.title) > 0.45
       or exists (select 1 from items si where si.product_id = p.id
-                 and (si.title ilike ${like} or word_similarity(${q}, si.title) > 0.45)))`);
+                 and (si.title ilike ${like} or word_similarity(${q}, si.title) > 0.45))
+      -- Other titles the film is known by (Midnight Sting finds Diggstown).
+      or exists (select 1 from items ai join film_titles ft on ft.tmdb_id = ai.tmdb_id
+                 where ai.product_id = p.id and ft.title ilike ${like}))`);
   }
 
   const whereSql = where.length ? sql`where ${sql.join(where, sql` and `)}` : sql``;
@@ -113,7 +116,8 @@ export type ItemDetail = {
   itemType: "film" | "tv_season" | "episode";
   format: MediaFormat;
   watchedBeforeLogging: boolean;
-  matchKey: string;
+  filmKey: string;
+  tmdbId: number | null;
   watched: boolean | null;
   box: { id: string; title: string; spineColours: string[]; location: Location };
 };
@@ -121,10 +125,10 @@ export type ItemDetail = {
 export async function getItem(id: string): Promise<ItemDetail | null> {
   const r = await db.execute<{
     id: string; title: string; release_year: number | null; item_type: ItemDetail["itemType"];
-    format: MediaFormat; watched_before_logging: boolean; match_key: string; watched: boolean | null;
+    format: MediaFormat; watched_before_logging: boolean; film_key: string; tmdb_id: number | null; watched: boolean | null;
     box_id: string; box_title: string; spine_colours: string[]; location: Location;
   }>(sql`
-    select i.id, i.title, i.release_year, i.item_type, i.format, i.watched_before_logging, i.match_key,
+    select i.id, i.title, i.release_year, i.item_type, i.format, i.watched_before_logging, i.film_key, i.tmdb_id,
       s.watched, p.id as box_id, p.title as box_title, p.spine_colours, p.location
     from items i
     join products p on p.id = i.product_id
@@ -139,9 +143,51 @@ export async function getItem(id: string): Promise<ItemDetail | null> {
     itemType: row.item_type,
     format: row.format,
     watchedBeforeLogging: row.watched_before_logging,
-    matchKey: row.match_key,
+    filmKey: row.film_key,
+    tmdbId: row.tmdb_id,
     watched: row.watched,
     box: { id: row.box_id, title: row.box_title, spineColours: row.spine_colours, location: row.location },
+  };
+}
+
+export type FilmInfo = {
+  posterPath: string | null;
+  overview: string | null;
+  runtimeMinutes: number | null;
+  ukCertificate: string | null;
+  ukReleaseDate: string | null;
+  genres: string[];
+  collectionName: string | null;
+  directors: string[];
+  cast: { name: string; character: string | null }[];
+  titles: { title: string; country: string | null; kind: string }[];
+};
+
+/** The stored TMDB record for a film: details, director(s), top-billed cast and the other titles it's known by. */
+export async function filmInfo(tmdbId: number): Promise<FilmInfo | null> {
+  const r = await db.execute<{
+    poster_path: string | null; overview: string | null; runtime_minutes: number | null; uk_certificate: string | null;
+    uk_release_date: string | null; genres: string[] | null; collection_name: string | null;
+    directors: string[] | null; cast: FilmInfo["cast"] | null; titles: FilmInfo["titles"] | null;
+  }>(sql`
+    select f.poster_path, f.overview, f.runtime_minutes, f.uk_certificate, f.uk_release_date::text, f.genres, f.collection_name,
+      (select array_agg(p.name order by p.name) from film_credits c join people p on p.tmdb_person_id = c.person_id
+        where c.tmdb_id = f.tmdb_id and c.job = 'Director') as directors,
+      (select json_agg(json_build_object('name', p.name, 'character', c.character) order by c.billing)
+        from film_credits c join people p on p.tmdb_person_id = c.person_id
+        where c.tmdb_id = f.tmdb_id and c.role = 'cast' and c.billing < 6) as cast,
+      -- TMDB's title, the original, and English-language alternatives (UK first).
+      (select json_agg(json_build_object('title', t.title, 'country', t.country, 'kind', t.kind)
+          order by t.kind = 'tmdb' desc, t.country = 'GB' desc, t.kind = 'original' desc, t.country)
+        from film_titles t where t.tmdb_id = f.tmdb_id
+          and (t.kind in ('tmdb', 'original') or t.country in ('GB', 'US', 'IE', 'AU', 'CA', 'NZ'))) as titles
+    from films f where f.tmdb_id = ${tmdbId} and f.enriched_at is not null`);
+  const f = r.rows[0];
+  if (!f) return null;
+  return {
+    posterPath: f.poster_path, overview: f.overview, runtimeMinutes: f.runtime_minutes, ukCertificate: f.uk_certificate,
+    ukReleaseDate: f.uk_release_date, genres: f.genres ?? [], collectionName: f.collection_name,
+    directors: f.directors ?? [], cast: f.cast ?? [], titles: f.titles ?? [],
   };
 }
 
@@ -156,7 +202,7 @@ export type WatchRow = {
 };
 
 /** Every logged watch of a film (any format), newest first. */
-export async function watchesFor(matchKey: string): Promise<WatchRow[]> {
+export async function watchesFor(filmKey: string): Promise<WatchRow[]> {
   const r = await db.execute<{
     id: string; title: string; watched_on: string; format: string; kind: string;
     format_from_memory: boolean; legacy_row: number | null;
@@ -164,7 +210,7 @@ export async function watchesFor(matchKey: string): Promise<WatchRow[]> {
     select w.id, w.title, w.watched_on::text as watched_on, f.name as format, f.kind,
       w.format_from_memory, w.legacy_row
     from watches w join viewing_formats f on f.id = w.format_id
-    where w.match_key = ${matchKey}
+    where w.film_key = ${filmKey}
     order by w.watched_on desc, w.created_at desc`);
   return r.rows.map((w) => ({
     id: w.id,
@@ -184,7 +230,7 @@ export async function getBox(id: string) {
   }>(sql`
     select p.id, p.title, p.spine_colours, p.location,
       (select json_agg(json_build_object('id', i.id, 'title', i.title, 'year', i.release_year, 'format', i.format, 'tmdbId', i.tmdb_id,
-          'watches', (select count(*) from watches w where w.match_key = i.match_key)) order by i.position)
+          'watches', (select count(*) from watches w where w.film_key = i.film_key)) order by i.position)
        from items i where i.product_id = p.id) as items
     from products p where p.id = ${id}`);
   const b = r.rows[0];
@@ -211,7 +257,7 @@ export async function getWatch(id: string): Promise<WatchDetail | null> {
   }>(sql`
     select w.id, w.title, w.release_year, w.watched_on::text as watched_on, w.format_id, f.name as format,
       w.format_from_memory, w.legacy_row,
-      (select i.id from items i where i.match_key = w.match_key and i.item_type = 'film' limit 1) as owned_item_id
+      (select i.id from items i where i.film_key = w.film_key and i.item_type = 'film' limit 1) as owned_item_id
     from watches w join viewing_formats f on f.id = w.format_id
     where w.id = ${id}`);
   const w = r.rows[0];
@@ -284,7 +330,10 @@ export const WATCH_PAGE_SIZE = 100;
 export async function searchWatches(f: WatchFilters) {
   const where: SQL[] = [];
   const q = f.q?.trim();
-  if (q) where.push(sql`(title ilike ${`%${q}%`} or word_similarity(${q}, title) > 0.5)`);
+  if (q) {
+    where.push(sql`(title ilike ${`%${q}%`} or word_similarity(${q}, title) > 0.5
+      or tmdb_id in (select ft.tmdb_id from film_titles ft where ft.title ilike ${`%${q}%`}))`);
+  }
   if (f.year) where.push(sql`extract(year from watched_on)::int = ${f.year}`);
   if (f.formatId) where.push(sql`format_id = ${f.formatId}`);
   if (f.kind) where.push(sql`kind = ${f.kind}`);
@@ -306,17 +355,17 @@ export async function searchWatches(f: WatchFilters) {
   // Rewatch numbering is over the whole log, so filters don't renumber it.
   const log = sql`
     with log as (
-      select w.id, w.title, w.release_year, w.watched_on, w.format_id, w.format_from_memory, w.created_at, w.legacy_row,
+      select w.id, w.title, w.release_year, w.watched_on, w.format_id, w.format_from_memory, w.created_at, w.legacy_row, w.tmdb_id,
         f.name as format, f.kind::text as kind,
-        row_number() over (partition by w.match_key order by w.watched_on, w.created_at)::int as nth,
-        count(*) over (partition by w.match_key)::int as times,
+        row_number() over (partition by w.film_key order by w.watched_on, w.created_at)::int as nth,
+        count(*) over (partition by w.film_key)::int as times,
         extract(year from w.watched_on)::int - w.release_year as age,
         own.id as owned_item_id, own.format::text as owned_format
       from watches w
       join viewing_formats f on f.id = w.format_id
       left join lateral (
         select i.id, i.format from items i join products p on p.id = i.product_id
-        where i.match_key = w.match_key and i.item_type = 'film'
+        where i.film_key = w.film_key and i.item_type = 'film'
         order by (p.location = 'shelf') desc, i.format limit 1
       ) own on true
     )`;
@@ -470,8 +519,8 @@ export async function pickFilms(c: PickCriteria, count = 4) {
   }>(sql`
     with cand as (
       select i.id, i.title, i.release_year as year, i.format, p.title as box, p.spine_colours, s.watched,
-        (select max(w.watched_on) from watches w where w.match_key = i.match_key)::text as last_watched,
-        (select count(*) from watches w where w.match_key = i.match_key)::int as times
+        (select max(w.watched_on) from watches w where w.film_key = i.film_key)::text as last_watched,
+        (select count(*) from watches w where w.film_key = i.film_key)::int as times
       from items i
       join products p on p.id = i.product_id
       join item_watch_status s on s.item_id = i.id
@@ -497,6 +546,50 @@ export async function pickFilms(c: PickCriteria, count = 4) {
       lastWatched: r.last_watched,
       times: r.times,
     })),
+  };
+}
+
+export type ReviewCandidate = { tmdbId: number; title: string; year: number | null; posterPath: string | null; via: string };
+export type ReviewEntry = {
+  matchKey: string;
+  title: string;
+  year: number | null;
+  status: "review" | "unmatched";
+  method: string | null;
+  candidates: ReviewCandidate[];
+  boxes: number;
+  watches: number;
+};
+
+export const REVIEW_PAGE_SIZE = 15;
+
+/** Films waiting for you to confirm their TMDB match: the ones used most first. */
+export async function listReviews(page = 1) {
+  const r = await db.execute<{
+    match_key: string; title: string; release_year: number | null; status: "review" | "unmatched"; method: string | null;
+    candidates: ReviewCandidate[] | null; boxes: number; watches: number; total: number;
+  }>(sql`
+    select m.match_key, m.title, m.release_year, m.status, m.method, m.candidates,
+      (select count(*) from items i where i.match_key = m.match_key)::int as boxes,
+      (select count(*) from watches w where w.match_key = m.match_key)::int as watches,
+      count(*) over ()::int as total
+    from tmdb_matches m
+    where m.status in ('review', 'unmatched')
+    order by (m.status = 'review') desc,
+      ((select count(*) from items i where i.match_key = m.match_key) + (select count(*) from watches w where w.match_key = m.match_key)) desc,
+      lower(m.title)
+    limit ${REVIEW_PAGE_SIZE} offset ${(Math.max(1, page) - 1) * REVIEW_PAGE_SIZE}`);
+  const counts = await db.execute<{ review: number; unmatched: number; done: number }>(sql`
+    select count(*) filter (where status = 'review')::int as review, count(*) filter (where status = 'unmatched')::int as unmatched,
+      count(*) filter (where status in ('confirmed', 'rejected'))::int as done
+    from tmdb_matches`);
+  return {
+    entries: r.rows.map<ReviewEntry>((e) => ({
+      matchKey: e.match_key, title: e.title, year: e.release_year, status: e.status, method: e.method,
+      candidates: e.candidates ?? [], boxes: e.boxes, watches: e.watches,
+    })),
+    total: r.rows[0]?.total ?? 0,
+    counts: counts.rows[0] ?? { review: 0, unmatched: 0, done: 0 },
   };
 }
 
