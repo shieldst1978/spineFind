@@ -8,14 +8,14 @@ import { enrichFilms, linkTmdbId } from "@/db/film-link";
 import { items, location as locationEnum, mediaFormat, products } from "@/db/schema";
 import { COLOUR_NAMES } from "@/lib/colours";
 import { parseYear, text, UUID } from "@/lib/form-values";
-import { itemTypeFor } from "@/lib/item-type";
+import { itemTypeFor, type ItemType } from "@/lib/item-type";
 import { matchKey } from "@/lib/match-key";
 
 export type BoxFormState = { error?: string };
 
 type Format = (typeof mediaFormat.enumValues)[number];
 type Location = (typeof locationEnum.enumValues)[number];
-type Row = { id: string | null; title: string; year: number | null; format: Format; tmdbId: number | null };
+type Row = { id: string | null; title: string; year: number | null; format: Format; tmdbId: number | null; itemType: ItemType };
 
 /** Reads and checks the box form shared by Add and Edit. */
 function parseBoxForm(form: FormData): { title: string; colours: string[]; location: Location; rows: Row[] } | { error: string } {
@@ -27,6 +27,7 @@ function parseBoxForm(form: FormData): { title: string; colours: string[]; locat
   const years = form.getAll("item_year").map(text);
   const formats = form.getAll("item_format").map(text);
   const tmdbIds = form.getAll("item_tmdb_id").map(text);
+  const kinds = form.getAll("item_kind").map(text);
 
   const rows: Row[] = [];
   for (let i = 0; i < titles.length; i++) {
@@ -37,8 +38,12 @@ function parseBoxForm(form: FormData): { title: string; colours: string[]; locat
     if ("error" in year) return { error: `"${filmTitle}": ${year.error}` };
     const format = formats[i] as Format;
     if (!mediaFormat.enumValues.includes(format)) return { error: `"${filmTitle}": choose a format.` };
-    const tmdbId = /^\d{1,9}$/.test(tmdbIds[i] ?? "") ? Number(tmdbIds[i]) : null;
-    rows.push({ id: UUID.test(ids[i] ?? "") ? ids[i] : null, title: filmTitle, year: year.year, format, tmdbId });
+    // Your Film/TV choice wins; without one, the title decides ("Season 2" is TV).
+    const guessed = itemTypeFor(filmTitle);
+    const itemType: ItemType = kinds[i] === "film" ? "film" : kinds[i] === "tv" ? (guessed === "film" ? "tv_season" : guessed) : guessed;
+    // TV isn't linked to TMDB films.
+    const tmdbId = itemType === "film" && /^\d{1,9}$/.test(tmdbIds[i] ?? "") ? Number(tmdbIds[i]) : null;
+    rows.push({ id: UUID.test(ids[i] ?? "") ? ids[i] : null, title: filmTitle, year: year.year, format, tmdbId, itemType });
   }
   if (!rows.length) return { error: "Add at least one film." };
 
@@ -50,7 +55,8 @@ function parseBoxForm(form: FormData): { title: string; colours: string[]; locat
 }
 
 /** Each film's TMDB link: picked from suggestions, or inherited from the same title + year already in the app. */
-const linkRows = (rows: Row[]) => Promise.all(rows.map((r) => linkTmdbId(r.title, r.year, r.tmdbId)));
+const linkRows = (rows: Row[]) =>
+  Promise.all(rows.map((r) => (r.itemType === "film" ? linkTmdbId(r.title, r.year, r.tmdbId) : Promise.resolve(null))));
 
 function shelfLink(title: string, location: Location, flag: string) {
   const p = new URLSearchParams({ q: title, [flag]: "1" });
@@ -74,7 +80,7 @@ export async function addBox(_prev: BoxFormState, form: FormData): Promise<BoxFo
         position: i + 1,
         title: r.title,
         releaseYear: r.year,
-        itemType: itemTypeFor(r.title),
+        itemType: r.itemType,
         format: r.format,
         matchKey: matchKey(r.title, r.year),
         tmdbId: linked[i],
@@ -118,7 +124,7 @@ export async function updateBox(productId: string, _prev: BoxFormState, form: Fo
         position: i + 1,
         title: r.title,
         releaseYear: r.year,
-        itemType: itemTypeFor(r.title),
+        itemType: r.itemType,
         format: r.format,
         matchKey: matchKey(r.title, r.year),
         updatedAt: new Date(),
@@ -128,7 +134,7 @@ export async function updateBox(productId: string, _prev: BoxFormState, form: Fo
         // A film picked from suggestions brings its TMDB id; otherwise a retitled
         // or re-dated film no longer matches its old TMDB entry.
         const sameFilm = old.title === r.title && old.releaseYear === r.year;
-        await tx.update(items).set({ ...values, tmdbId: r.tmdbId ?? (sameFilm ? old.tmdbId : null) ?? linked[i] }).where(eq(items.id, old.id));
+        await tx.update(items).set({ ...values, tmdbId: r.itemType !== "film" ? null : r.tmdbId ?? (sameFilm ? old.tmdbId : null) ?? linked[i] }).where(eq(items.id, old.id));
       } else {
         await tx.insert(items).values({ ...values, productId, legacyNumber: nextNumber++, tmdbId: linked[i] });
       }

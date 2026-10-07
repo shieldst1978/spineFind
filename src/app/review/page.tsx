@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { listReviews, REVIEW_PAGE_SIZE, type ReviewCandidate, type ReviewEntry } from "@/db/queries";
+import { listDecisions, listReviews, REVIEW_PAGE_SIZE, type ReviewCandidate, type ReviewDecision, type ReviewEntry } from "@/db/queries";
 import { withBase } from "@/lib/base-path";
 import { searchMovies, tmdbEnabled } from "@/lib/tmdb";
-import { confirmMatch, rejectMatch } from "./actions";
+import { confirmMatch, markAsTv, rejectMatch, reopenMatch } from "./actions";
 
 export const metadata: Metadata = { title: "Review matches · SpineFind" };
 
@@ -12,53 +12,118 @@ type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 const field =
   "min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm dark:border-stone-700 dark:bg-stone-900";
+const tab = (active: boolean) =>
+  `rounded-md px-3 py-1.5 text-sm ${active ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900" : "text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800"}`;
 
 export default async function ReviewPage({ searchParams }: PageProps<"/review">) {
   const sp: SP = await searchParams;
   const page = Math.max(1, Number(one(sp.page)) || 1);
-  const { entries, total, counts } = await listReviews(page);
-  const pages = Math.max(1, Math.ceil(total / REVIEW_PAGE_SIZE));
+  const matchedView = one(sp.view) === "matched";
+  const { entries, total, counts } = await listReviews(matchedView ? 1 : page);
 
+  return (
+    <main className="mx-auto w-full min-w-0 max-w-2xl flex-1 space-y-5 px-4 py-6">
+      <header className="space-y-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Review matches</h1>
+        <p className="text-sm text-stone-600 dark:text-stone-400">
+          {counts.review} to check · {counts.unmatched} not found · {counts.done} decided. Linking a film gives it cast, crew, genres and poster.
+          Leaving one unlinked is fine; it just won&apos;t have those details.
+        </p>
+        <nav className="flex gap-1" aria-label="Review views">
+          <Link href="/review" className={tab(!matchedView)} aria-current={!matchedView ? "page" : undefined}>To review</Link>
+          <Link href="/review?view=matched" className={tab(matchedView)} aria-current={matchedView ? "page" : undefined}>Matched</Link>
+        </nav>
+      </header>
+
+      {matchedView ? <MatchedList sp={sp} page={page} /> : (
+        <>
+          <ToReview sp={sp} page={page} entries={entries} />
+          <Pager page={page} pages={Math.max(1, Math.ceil(total / REVIEW_PAGE_SIZE))} href={(n) => `/review?page=${n}`} />
+        </>
+      )}
+    </main>
+  );
+}
+
+async function ToReview({ sp, page, entries }: { sp: SP; page: number; entries: ReviewEntry[] }) {
   // A TMDB search for one entry, shown inside its card.
   const searchFor = one(sp.for);
   const query = one(sp.q).trim();
   const searched = searchFor && query && tmdbEnabled()
     ? (await searchMovies(query).catch(() => [])).slice(0, 8).map<ReviewCandidate>((r) => ({ ...r, via: `search: "${query}"` }))
     : [];
-
+  if (entries.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-stone-600 dark:border-stone-700 dark:text-stone-400">
+        All done. Nothing left to review.
+      </p>
+    );
+  }
   return (
-    <main className="mx-auto w-full min-w-0 max-w-2xl flex-1 space-y-5 px-4 py-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Review matches</h1>
-        <p className="text-sm text-stone-600 dark:text-stone-400">
-          {counts.review} to check · {counts.unmatched} not found · {counts.done} done. Linking a film gives it cast, crew, genres and poster.
-          Leaving one unlinked is fine; it just won&apos;t have those details.
-        </p>
-      </header>
-
-      {entries.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-stone-600 dark:border-stone-700 dark:text-stone-400">
-          All done. Nothing left to review.
-        </p>
-      ) : (
-        <ul className="space-y-4">
-          {entries.map((e) => (
-            <ReviewCard key={e.matchKey} entry={e} page={page} searched={searchFor === e.matchKey ? searched : null} query={searchFor === e.matchKey ? query : ""} />
-          ))}
-        </ul>
-      )}
-
-      {pages > 1 && (
-        <nav className="flex items-center justify-between text-sm" aria-label="Pages">
-          {page > 1 ? <Link href={`/review?page=${page - 1}`} className="rounded-lg px-3 py-2 hover:bg-stone-100 dark:hover:bg-stone-800">← Previous</Link> : <span />}
-          <span className="text-stone-600 dark:text-stone-400">Page {page} of {pages}</span>
-          {page < pages ? <Link href={`/review?page=${page + 1}`} className="rounded-lg px-3 py-2 hover:bg-stone-100 dark:hover:bg-stone-800">Next →</Link> : <span />}
-        </nav>
-      )}
-    </main>
+    <ul className="space-y-4">
+      {entries.map((e) => (
+        <ReviewCard key={e.matchKey} entry={e} page={page} searched={searchFor === e.matchKey ? searched : null} query={searchFor === e.matchKey ? query : ""} />
+      ))}
+    </ul>
   );
 }
 
+/** Every settled match, newest decision first, so a wrong one can be reopened. */
+async function MatchedList({ sp, page }: { sp: SP; page: number }) {
+  const q = one(sp.q).trim();
+  const { decisions, total } = await listDecisions(page, q);
+  const pages = Math.max(1, Math.ceil(total / REVIEW_PAGE_SIZE));
+  return (
+    <>
+      <form action={withBase("/review")} className="flex gap-2">
+        <input type="hidden" name="view" value="matched" />
+        <input type="search" name="q" defaultValue={q} placeholder="Find a film" aria-label="Find a matched film" className={field} />
+        <button type="submit" className="shrink-0 rounded-lg border border-stone-300 px-3 py-2 text-sm dark:border-stone-700">Find</button>
+      </form>
+      {decisions.length === 0 ? (
+        <p className="text-sm text-stone-600 dark:text-stone-400">{q ? `Nothing matched for "${q}".` : "No matches yet."}</p>
+      ) : (
+        <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white dark:divide-stone-800 dark:border-stone-800 dark:bg-stone-900">
+          {decisions.map((d) => <DecisionRow key={d.matchKey} d={d} />)}
+        </ul>
+      )}
+      <Pager page={page} pages={pages} href={(n) => `/review?${new URLSearchParams({ view: "matched", page: String(n), ...(q ? { q } : {}) })}`} />
+    </>
+  );
+}
+
+function DecisionRow({ d }: { d: ReviewDecision }) {
+  const how = d.status === "auto" ? "automatic" : d.method === "TV, not a film" ? "TV, not a film" : d.status === "rejected" ? "none of these" : "yours";
+  return (
+    <li className="flex items-center gap-3 p-3">
+      {d.linked?.posterPath ? (
+        <Image src={`https://image.tmdb.org/t/p/w92${d.linked.posterPath}`} alt="" width={36} height={54} className="h-[54px] w-9 shrink-0 rounded-sm object-cover" />
+      ) : (
+        <span className="h-[54px] w-9 shrink-0 rounded-sm bg-stone-200 dark:bg-stone-700" />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{d.title} <span className="font-normal text-stone-500">({d.year ?? "no year"})</span></p>
+        <p className="truncate text-xs text-stone-500">
+          {d.linked ? <>→ {d.linked.title} ({d.linked.year ?? "?"})</> : "not linked"} · {how}
+        </p>
+      </div>
+      <form action={reopenMatch.bind(null, d.matchKey)}>
+        <button type="submit" className="shrink-0 rounded-lg border border-stone-300 px-3 py-2 text-sm dark:border-stone-700">Change</button>
+      </form>
+    </li>
+  );
+}
+
+function Pager({ page, pages, href }: { page: number; pages: number; href: (n: number) => string }) {
+  if (pages <= 1) return null;
+  return (
+    <nav className="flex items-center justify-between text-sm" aria-label="Pages">
+      {page > 1 ? <Link href={href(page - 1)} className="rounded-lg px-3 py-2 hover:bg-stone-100 dark:hover:bg-stone-800">← Previous</Link> : <span />}
+      <span className="text-stone-600 dark:text-stone-400">Page {page} of {pages}</span>
+      {page < pages ? <Link href={href(page + 1)} className="rounded-lg px-3 py-2 hover:bg-stone-100 dark:hover:bg-stone-800">Next →</Link> : <span />}
+    </nav>
+  );
+}
 function ReviewCard({ entry: e, page, searched, query }: { entry: ReviewEntry; page: number; searched: ReviewCandidate[] | null; query: string }) {
   const uses = [e.boxes && `${e.boxes} on the shelf`, e.watches && `${e.watches} ${e.watches === 1 ? "watch" : "watches"}`].filter(Boolean).join(" · ");
   const options = searched ?? e.candidates;
@@ -113,6 +178,12 @@ function ReviewCard({ entry: e, page, searched, query }: { entry: ReviewEntry; p
           <input type="hidden" name="page" value={page} />
           <input type="search" name="q" defaultValue={query || e.title} aria-label={`Search TMDB for ${e.title}`} className={field} />
           <button type="submit" className="shrink-0 rounded-lg border border-stone-300 px-3 py-2 text-sm dark:border-stone-700">Search TMDB</button>
+        </form>
+        <form action={markAsTv.bind(null, e.matchKey)}>
+          <input type="hidden" name="page" value={page} />
+          <button type="submit" className="rounded-lg px-3 py-2 text-sm text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800">
+            TV, not a film
+          </button>
         </form>
         <form action={rejectMatch.bind(null, e.matchKey)}>
           <input type="hidden" name="page" value={page} />

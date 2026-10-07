@@ -226,10 +226,10 @@ export async function watchesFor(filmKey: string): Promise<WatchRow[]> {
 export async function getBox(id: string) {
   const r = await db.execute<{
     id: string; title: string; spine_colours: string[]; location: Location;
-    items: { id: string; title: string; year: number | null; format: MediaFormat; tmdbId: number | null; watches: number }[] | null;
+    items: { id: string; title: string; year: number | null; format: MediaFormat; tmdbId: number | null; type: string; watches: number }[] | null;
   }>(sql`
     select p.id, p.title, p.spine_colours, p.location,
-      (select json_agg(json_build_object('id', i.id, 'title', i.title, 'year', i.release_year, 'format', i.format, 'tmdbId', i.tmdb_id,
+      (select json_agg(json_build_object('id', i.id, 'title', i.title, 'year', i.release_year, 'format', i.format, 'tmdbId', i.tmdb_id, 'type', i.item_type,
           'watches', (select count(*) from watches w where w.film_key = i.film_key)) order by i.position)
        from items i where i.product_id = p.id) as items
     from products p where p.id = ${id}`);
@@ -575,7 +575,7 @@ export async function listReviews(page = 1) {
       count(*) over ()::int as total
     from tmdb_matches m
     where m.status in ('review', 'unmatched')
-    order by (m.status = 'review') desc,
+    order by coalesce(m.method = 'reopened by you', false) desc, (m.status = 'review') desc,
       ((select count(*) from items i where i.match_key = m.match_key) + (select count(*) from watches w where w.match_key = m.match_key)) desc,
       lower(m.title)
     limit ${REVIEW_PAGE_SIZE} offset ${(Math.max(1, page) - 1) * REVIEW_PAGE_SIZE}`);
@@ -590,6 +590,38 @@ export async function listReviews(page = 1) {
     })),
     total: r.rows[0]?.total ?? 0,
     counts: counts.rows[0] ?? { review: 0, unmatched: 0, done: 0 },
+  };
+}
+
+export type ReviewDecision = {
+  matchKey: string;
+  title: string;
+  year: number | null;
+  status: "confirmed" | "rejected" | "auto";
+  method: string | null;
+  linked: { title: string; year: number | null; posterPath: string | null } | null;
+};
+
+/** Settled matches (yours and automatic), most recently decided first, optionally filtered by title. */
+export async function listDecisions(page = 1, q = "") {
+  const filter = q.trim() ? sql`and (m.title ilike ${`%${q.trim()}%`} or f.title ilike ${`%${q.trim()}%`})` : sql``;
+  const r = await db.execute<{
+    match_key: string; title: string; release_year: number | null; status: ReviewDecision["status"]; method: string | null;
+    tmdb_title: string | null; tmdb_year: number | null; poster_path: string | null; total: number;
+  }>(sql`
+    select m.match_key, m.title, m.release_year, m.status, m.method,
+      f.title as tmdb_title, extract(year from f.release_date)::int as tmdb_year, f.poster_path,
+      count(*) over ()::int as total
+    from tmdb_matches m left join films f on f.tmdb_id = m.tmdb_id
+    where m.status in ('confirmed', 'rejected', 'auto') ${filter}
+    order by (m.status <> 'auto') desc, m.checked_at desc, lower(m.title)
+    limit ${REVIEW_PAGE_SIZE} offset ${(Math.max(1, page) - 1) * REVIEW_PAGE_SIZE}`);
+  return {
+    decisions: r.rows.map<ReviewDecision>((d) => ({
+      matchKey: d.match_key, title: d.title, year: d.release_year, status: d.status, method: d.method,
+      linked: d.tmdb_title ? { title: d.tmdb_title, year: d.tmdb_year, posterPath: d.poster_path } : null,
+    })),
+    total: r.rows[0]?.total ?? 0,
   };
 }
 

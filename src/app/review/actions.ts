@@ -48,6 +48,45 @@ export async function confirmMatch(matchKey: string, form: FormData) {
   redirect(backTo(form));
 }
 
+/**
+ * Not a film at all (a TV series logged or shelved as one): leave it unlinked,
+ * and mark its box entries as TV so they drop out of film stats and watched status.
+ */
+export async function markAsTv(matchKey: string, form: FormData) {
+  await db.transaction(async (tx) => {
+    await tx.update(tmdbMatches).set({ status: "rejected", tmdbId: null, method: "TV, not a film", checkedAt: new Date() }).where(eq(tmdbMatches.matchKey, matchKey));
+    await tx.execute(sql`update items set item_type = 'tv_season', tmdb_id = null, updated_at = now() where match_key = ${matchKey} and item_type = 'film'`);
+    await tx.execute(sql`update watches set tmdb_id = null, updated_at = now() where match_key = ${matchKey}`);
+  });
+  revalidatePath("/", "layout");
+  redirect(backTo(form));
+}
+
+/**
+ * Undoes a match (yours or automatic): unlinks its boxes and watches and puts it
+ * back at the top of the review list. Entries whose year you corrected are found
+ * by title and the TMDB film they were linked to.
+ */
+export async function reopenMatch(matchKey: string) {
+  const [entry] = await db.select().from(tmdbMatches).where(eq(tmdbMatches.matchKey, matchKey));
+  if (entry) {
+    const titleKey = matchKey.replace(/\|.*$/, "");
+    await db.transaction(async (tx) => {
+      await tx.update(tmdbMatches).set({ status: "review", tmdbId: null, method: "reopened by you", checkedAt: new Date() }).where(eq(tmdbMatches.matchKey, matchKey));
+      for (const table of ["items", "watches"] as const) {
+        await tx.execute(sql`update ${sql.identifier(table)} set tmdb_id = null, updated_at = now()
+          where match_key = ${matchKey} or (${entry.tmdbId}::int is not null and tmdb_id = ${entry.tmdbId} and split_part(match_key, '|', 1) = ${titleKey})`);
+      }
+      // A TV mark is undone too.
+      if (entry.method === "TV, not a film") {
+        await tx.execute(sql`update items set item_type = 'film', updated_at = now() where match_key = ${matchKey} and item_type = 'tv_season'`);
+      }
+    });
+  }
+  revalidatePath("/", "layout");
+  redirect("/review");
+}
+
 /** None of the candidates is right: leave it unlinked and don't ask again. */
 export async function rejectMatch(matchKey: string, form: FormData) {
   await db.update(tmdbMatches).set({ status: "rejected", tmdbId: null, method: "none of these, said you", checkedAt: new Date() }).where(eq(tmdbMatches.matchKey, matchKey));

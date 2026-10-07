@@ -6,18 +6,21 @@ import type { BoxFormState } from "@/app/box/actions";
 import { FilmTitleInput } from "@/components/film-title-input";
 import { Spine } from "@/components/spine";
 import { COLOUR_NAMES } from "@/lib/colours";
+import { itemTypeFor } from "@/lib/item-type";
 
 const FORMATS = ["4K UltraHD", "Blu Ray", "DVD", "HD DVD"] as const;
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base dark:border-stone-700 dark:bg-stone-900";
 
-type Row = { key: number; id: string; title: string; year: string; format: string; tmdbId: string };
+/** kind "" = decided from the title ("Season 2" is TV); "film" or "tv" once you choose. */
+type Row = { key: number; id: string; title: string; year: string; format: string; tmdbId: string; kind: "" | "film" | "tv" };
+const kindOf = (r: Row) => r.kind || (itemTypeFor(r.title) === "film" ? "film" : "tv");
 
 export type BoxFormInitial = {
   title: string;
   colours: string[];
   location: string;
-  items: { id: string; title: string; year: number | null; format: string; tmdbId?: number | null }[];
+  items: { id: string; title: string; year: number | null; format: string; tmdbId?: number | null; type?: string }[];
 };
 
 /** The box form for both adding and editing. Existing films carry their id so they're updated, not replaced. */
@@ -44,8 +47,9 @@ export function BoxForm({
     initial?.items.length
       ? initial.items.map((it, i) => ({
           key: i, id: it.id, title: it.title, year: it.year ? String(it.year) : "", format: it.format, tmdbId: it.tmdbId ? String(it.tmdbId) : "",
+          kind: it.type ? (it.type === "film" ? "film" : "tv") : "",
         }))
-      : [{ key: 0, id: "", title: "", year: "", format: "Blu Ray", tmdbId: "" }],
+      : [{ key: 0, id: "", title: "", year: "", format: "Blu Ray", tmdbId: "", kind: "" }],
   );
   const removedExisting = (initial?.items.length ?? 0) - rows.filter((r) => r.id).length;
 
@@ -54,7 +58,7 @@ export function BoxForm({
   const setRow = (key: number, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const addRow = () =>
-    setRows((rs) => [...rs, { key: Math.max(...rs.map((r) => r.key)) + 1, id: "", title: "", year: "", format: rs.at(-1)!.format, tmdbId: "" }]);
+    setRows((rs) => [...rs, { key: Math.max(...rs.map((r) => r.key)) + 1, id: "", title: "", year: "", format: rs.at(-1)!.format, tmdbId: "", kind: "" }]);
 
   return (
     <form action={action} className="space-y-6">
@@ -77,13 +81,20 @@ export function BoxForm({
                   aria-label={`Remove film ${i + 1}`}>✕</button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <input type="hidden" name="item_kind" value={kindOf(r)} />
+            <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
               <input name="item_year" value={r.year} onChange={(e) => setRow(r.key, { year: e.target.value, tmdbId: "" })}
                 className={field} inputMode="numeric" pattern="[0-9]{4}" maxLength={4} placeholder="Year"
                 aria-label={`Film ${i + 1} release year`} />
               <select name="item_format" value={r.format} onChange={(e) => setRow(r.key, { format: e.target.value })}
                 className={field} aria-label={`Film ${i + 1} format`}>
                 {FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+              {/* TV isn't matched to TMDB films and doesn't count towards watched status. */}
+              <select value={kindOf(r)} onChange={(e) => setRow(r.key, { kind: e.target.value as Row["kind"], tmdbId: "" })}
+                className={field} aria-label={`Film ${i + 1}: film or TV`}>
+                <option value="film">Film</option>
+                <option value="tv">TV</option>
               </select>
             </div>
           </div>
