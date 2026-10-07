@@ -102,8 +102,8 @@ function DecisionRow({ d }: { d: ReviewDecision }) {
         <span className="h-[54px] w-9 shrink-0 rounded-sm bg-stone-200 dark:bg-stone-700" />
       )}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{d.title} <span className="font-normal text-stone-500">({d.year ?? "no year"})</span></p>
-        <p className="truncate text-xs text-stone-500">
+        <p className="text-sm font-medium break-words">{d.title} <span className="font-normal text-stone-500">({d.year ?? "no year"})</span></p>
+        <p className="text-xs break-words text-stone-500">
           {d.linked ? <>→ {d.linked.title} ({d.linked.year ?? "?"})</> : "not linked"} · {how}
         </p>
       </div>
@@ -148,10 +148,10 @@ function ReviewCard({ entry: e, page, searched, query }: { entry: ReviewEntry; p
                 <span className="h-[54px] w-9 shrink-0 rounded-sm bg-stone-200 dark:bg-stone-700" />
               )}
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm">
+                <p className="text-sm break-words">
                   {c.title} <span className="text-stone-500">({c.year ?? "?"})</span>
                 </p>
-                <p className="truncate text-xs text-stone-500">{c.via}</p>
+                <p className="text-xs break-words text-stone-500">{c.via}</p>
               </div>
               <form action={confirmMatch.bind(null, e.matchKey)} className="flex shrink-0 flex-col items-end gap-1">
                 <input type="hidden" name="tmdb_id" value={c.tmdbId} />
