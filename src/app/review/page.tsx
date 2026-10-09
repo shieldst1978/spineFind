@@ -3,7 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { listDecisions, listReviews, REVIEW_PAGE_SIZE, type ReviewCandidate, type ReviewDecision, type ReviewEntry } from "@/db/queries";
 import { withBase } from "@/lib/base-path";
-import { searchMovies, tmdbEnabled } from "@/lib/tmdb";
+import { normaliseTitle } from "@/lib/match-key";
+import { getMovie, searchMovies, tmdbEnabled } from "@/lib/tmdb";
 import { confirmMatch, markAsTv, rejectMatch, reopenMatch } from "./actions";
 
 export const metadata: Metadata = { title: "Review matches · SpineFind" };
@@ -49,9 +50,7 @@ async function ToReview({ sp, page, entries }: { sp: SP; page: number; entries: 
   // A TMDB search for one entry, shown inside its card.
   const searchFor = one(sp.for);
   const query = one(sp.q).trim();
-  const searched = searchFor && query && tmdbEnabled()
-    ? (await searchMovies(query).catch(() => [])).slice(0, 8).map<ReviewCandidate>((r) => ({ ...r, via: `search: "${query}"` }))
-    : [];
+  const searched = searchFor && query && tmdbEnabled() ? await tmdbSearch(query) : [];
   if (entries.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-stone-600 dark:border-stone-700 dark:text-stone-400">
@@ -66,6 +65,26 @@ async function ToReview({ sp, page, entries }: { sp: SP; page: number; entries: 
       ))}
     </ul>
   );
+}
+
+/**
+ * The card's TMDB search. A pasted TMDB link (or #id) picks that film directly;
+ * otherwise exact title matches come first, since TMDB ranks by popularity
+ * ("Back to Back" comes 15th, behind every Back to the Future).
+ */
+async function tmdbSearch(query: string): Promise<ReviewCandidate[]> {
+  const id = query.match(/themoviedb\.org\/movie\/(\d+)/)?.[1] ?? query.match(/^#\s*(\d{1,9})$/)?.[1];
+  if (id) {
+    const m = await getMovie(Number(id)).catch(() => null);
+    return m ? [{ tmdbId: m.tmdbId, title: m.title, year: m.releaseDate ? Number(m.releaseDate.slice(0, 4)) : null, posterPath: m.posterPath, via: "from your TMDB link" }] : [];
+  }
+  const want = normaliseTitle(query);
+  const results = await searchMovies(query).catch(() => []);
+  return results
+    .map((r, i) => ({ r, i, exact: normaliseTitle(r.title) === want }))
+    .sort((a, b) => Number(b.exact) - Number(a.exact) || a.i - b.i)
+    .slice(0, 12)
+    .map(({ r, exact }) => ({ tmdbId: r.tmdbId, title: r.title, year: r.year, posterPath: r.posterPath, via: exact ? "same title" : `search: "${query}"` }));
 }
 
 /** Every settled match, newest decision first, so a wrong one can be reopened. */
@@ -169,7 +188,7 @@ function ReviewCard({ entry: e, page, searched, query }: { entry: ReviewEntry; p
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-stone-600 dark:text-stone-400">{searched ? `Nothing on TMDB for "${query}".` : "No candidates. Try a search below."}</p>
+        <p className="text-sm text-stone-600 dark:text-stone-400">{searched ? `Nothing on TMDB for "${query}".` : "No candidates. Search below, or paste the film's TMDB link."}</p>
       )}
 
       <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-stone-100 pt-3 dark:border-stone-800">
