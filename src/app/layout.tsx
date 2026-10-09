@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Link from "next/link";
 import { Nav } from "@/components/nav";
 import "./globals.css";
 
@@ -30,10 +31,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <Nav />
         {children}
-        <footer className="mx-auto w-full max-w-5xl px-4 py-6 text-xs text-stone-500">
+        <footer className="mx-auto w-full max-w-5xl space-y-2 px-4 py-6 text-xs text-stone-500">
+          <Link href="/settings" className="inline-block py-1 text-sm underline">Settings</Link>
+          <p>
           Film data and posters from{" "}
           <a href="https://www.themoviedb.org" className="underline" target="_blank" rel="noreferrer">TMDB</a>.
           This product uses the TMDB API but is not endorsed or certified by TMDB.
+          </p>
         </footer>
       </body>
     </html>

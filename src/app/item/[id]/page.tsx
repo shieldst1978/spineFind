@@ -5,7 +5,9 @@ import { notFound } from "next/navigation";
 import { Spine } from "@/components/spine";
 import { filmInfo, getItem, listViewingFormats, watchesFor, type FilmInfo } from "@/db/queries";
 import { DISC_TO_MEDIA } from "@/db/seed-formats";
+import { availabilityFor, type FilmAvailability } from "@/db/streaming";
 import { normaliseTitle } from "@/lib/match-key";
+import type { Offer } from "@/lib/tmdb";
 import { logWatch, setSeenBefore } from "./actions";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -31,10 +33,11 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
-  const [history, formats, info] = await Promise.all([
+  const [history, formats, info, where] = await Promise.all([
     watchesFor(item.filmKey),
     listViewingFormats(),
     item.tmdbId ? filmInfo(item.tmdbId) : null,
+    item.tmdbId && item.itemType === "film" ? availabilityFor(item.tmdbId) : null,
   ]);
   const isFilm = item.itemType === "film";
   const discWatches = history.filter((w) => w.kind === "disc");
@@ -75,6 +78,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
       </section>
 
       {info && <AboutFilm info={info} title={item.title} />}
+      {where && <WhereToWatch where={where} />}
 
       {(logged || sp.updated || sp.deleted) && (
         <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
@@ -182,6 +186,53 @@ function AboutFilm({ info, title }: { info: FilmInfo; title: string }) {
         )}
       </div>
     </section>
+  );
+}
+
+/** UK streaming, free, rent and buy options, with your own services first. */
+function WhereToWatch({ where }: { where: FilmAvailability }) {
+  const yours = [...where.stream, ...where.free, ...where.ads].filter((o) => where.mine.has(o.providerId));
+  const otherStream = where.stream.filter((o) => !where.mine.has(o.providerId));
+  const free = [...where.free, ...where.ads].filter((o) => !where.mine.has(o.providerId));
+  const rentBuy = [...new Map([...where.rent, ...where.buy].map((o) => [o.providerId, o])).values()];
+  const nothing = !yours.length && !otherStream.length && !free.length && !rentBuy.length;
+  return (
+    <section className="space-y-2 rounded-lg border border-stone-200 bg-white p-4 text-sm dark:border-stone-800 dark:bg-stone-900">
+      <h2 className="font-medium">Where to watch in the UK</h2>
+      {nothing ? (
+        <p className="text-stone-600 dark:text-stone-400">Not streaming, to rent or to buy anywhere in the UK right now.</p>
+      ) : (
+        <>
+          {yours.length > 0 ? (
+            <OfferLine label="On your services" offers={yours} strong />
+          ) : (
+            <p className="text-stone-600 dark:text-stone-400">
+              Not on your services.{where.mine.size === 0 && <> <Link href="/settings" className="underline">Tick the ones you have</Link>.</>}
+            </p>
+          )}
+          {otherStream.length > 0 && <OfferLine label="Also streaming on" offers={otherStream} />}
+          {free.length > 0 && <OfferLine label="Free" offers={free} />}
+          {rentBuy.length > 0 && <OfferLine label="Rent or buy" offers={rentBuy} />}
+        </>
+      )}
+      <p className="text-xs text-stone-500">Streaming data from JustWatch.</p>
+    </section>
+  );
+}
+
+function OfferLine({ label, offers, strong }: { label: string; offers: Offer[]; strong?: boolean }) {
+  return (
+    <div className="space-y-1">
+      <p className={strong ? "font-medium text-emerald-800 dark:text-emerald-300" : "text-stone-500"}>{label}</p>
+      <ul className="flex flex-wrap gap-1.5">
+        {offers.map((o) => (
+          <li key={o.providerId} className="flex items-center gap-1.5 rounded-md border border-stone-200 py-0.5 pl-0.5 pr-2 text-xs dark:border-stone-700">
+            {o.logoPath && <Image src={`https://image.tmdb.org/t/p/w92${o.logoPath}`} alt="" width={20} height={20} className="size-5 rounded" />}
+            {o.name}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

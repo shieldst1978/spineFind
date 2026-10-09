@@ -248,3 +248,22 @@ export const itemWatchStatus = pgView("item_watch_status", {
     and w.format_id in (select id from viewing_formats where kind = 'disc')
   group by i.id
 `);
+
+
+/** UK streaming services (from TMDB / JustWatch), and which ones you subscribe to. */
+export const streamingServices = pgTable("streaming_services", {
+  providerId: integer("provider_id").primaryKey(),
+  name: text("name").notNull(),
+  logoPath: text("logo_path"),
+  /** TMDB's UK display order: the big services first. */
+  priority: integer("priority").notNull().default(999),
+  subscribed: boolean("subscribed").notNull().default(false),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Where a film can be watched in the UK, looked up live and kept for a day. */
+export const filmAvailability = pgTable("film_availability", {
+  tmdbId: integer("tmdb_id").primaryKey(),
+  offers: jsonb("offers").notNull(),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+});

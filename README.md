@@ -29,6 +29,7 @@ A personal catalogue of the films on my shelves, searchable by spine colour, and
 | **Log a watch** | `/spinefind/watches/new` | Log any film, owned or not. Suggestions come from your log, shelf and TMDB; picking a film you own sets the format to your copy. New viewing formats can be added inline. |
 | **Watch edit** | `/spinefind/watches/<id>` | Correct a watch's title, year, date or format, or delete it (two taps). Works for imported watches too. |
 | **Pick** | `/spinefind/pick` | Choose a film to watch at random: unwatched / rewatch / anything, by decade (or a random "surprise" decade), format, spine colour, "not seen in N years". Shows TMDB details and which spine to look for. |
+| **Settings** | `/spinefind/settings` (footer link) | Tick the UK streaming services you subscribe to. Film pages then show "Where to watch in the UK", with your services first. |
 | **Review** | `/spinefind/review` | Films the TMDB matcher wasn't sure about, most-used first: pick the right one (optionally correcting your year to TMDB's), search TMDB yourself, or say "None of these". |
 
 ## How it fits together
@@ -99,7 +100,8 @@ src/
     watches/new/page.tsx        Log a watch; watches/actions.ts: addWatch, suggestFilms
     watches/[id]/page.tsx       Edit / delete a watch; watches/[id]/actions.ts: updateWatch, deleteWatch
     pick/page.tsx               Pick a film
-    review/page.tsx             Review TMDB matches; review/actions.ts: confirmMatch, rejectMatch
+    review/page.tsx             Review TMDB matches; review/actions.ts: confirmMatch, rejectMatch, markAsTv, reopenMatch
+    settings/page.tsx           Your streaming services; settings/actions.ts: saveServices
     icon.svg, apple-icon.png    Browser and Home Screen icons (public, bypass sign-in)
   components/                   Client-side pieces
     box-form.tsx                The Add/Edit box form (films first, box title follows the first film)
@@ -118,6 +120,7 @@ src/
     films.ts                    cacheFilm() (full TMDB record), detailsForItem() (confident title+year match only)
     film-link.ts                linkTmdbId(): a saved film inherits its title+year's TMDB link; enrichFilms()
     enrich.ts                   storeFilm(): writes a full TMDB record (film, people, credits, titles)
+    streaming.ts                UK services list and your subscriptions; availabilityFor() (cached a day)
     seed-formats.ts             Starting viewing formats and aliases; disc → media format mapping
   lib/
     match-key.ts                Title normalisation and the title+year matching key
@@ -132,7 +135,7 @@ scripts/
   import.ts                     Rebuild a database from the two spreadsheets, with a report
   enrich.ts                     Match every film to TMDB and store its full record (see TMDB enrichment)
   start.mjs                     Container entry point: run migrations, then start Next
-drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key)
+drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming)
 docs/schema.md                  Original data-model design notes (schema.ts is authoritative)
 Dockerfile, .dockerignore       Container image build (personal data and secrets excluded)
 .github/workflows/build.yml     Build and push the image on every push to main
@@ -150,6 +153,8 @@ Dockerfile, .dockerignore       Container image build (personal data and secrets
 | `people` | An actor or crew member | `name`, `profile_path` |
 | `film_credits` | Who did what on a film | `role` (cast / crew), `job` (Director, Screenplay, Original Music Composer…), `character`, `billing` (cast order, top 10) |
 | `film_titles` | Every title a film goes by | `kind` (tmdb / original / alternative), `country` (GB, US…) |
+| `streaming_services` | A UK streaming / rental service (TMDB's JustWatch list, refreshed monthly) | `name`, `logo_path`, `priority`, `subscribed` (yours) |
+| `film_availability` | Where a film can be watched in the UK, cached for a day | `offers` (stream / free / ads / rent / buy), `fetched_at` |
 | `tmdb_matches` | The matcher's answer per title + year as entered | `status` (auto / review / confirmed / rejected / unmatched), `tmdb_id`, `method` (why), `candidates` |
 | `review_flags` | Things the import wants checked | `kind`, `status` |
 | `item_watch_status` (view) | Watched status per item | see below |

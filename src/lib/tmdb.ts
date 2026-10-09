@@ -187,3 +187,30 @@ export async function getMovie(tmdbId: number): Promise<TmdbMovie> {
     posterPath: m.poster_path,
   };
 }
+
+
+export type TmdbProvider = { providerId: number; name: string; logoPath: string | null; priority: number };
+
+/** Every streaming / rental service TMDB (via JustWatch) knows in the UK, big ones first. */
+export async function listUkProviders(): Promise<TmdbProvider[]> {
+  const data = await get<{ results: { provider_id: number; provider_name: string; logo_path: string | null; display_priorities?: Record<string, number>; display_priority?: number }[] }>(
+    "/watch/providers/movie",
+    { watch_region: "GB" },
+  );
+  return data.results
+    .map((p) => ({ providerId: p.provider_id, name: p.provider_name, logoPath: p.logo_path, priority: p.display_priorities?.GB ?? p.display_priority ?? 999 }))
+    .sort((a, b) => a.priority - b.priority);
+}
+
+export type Offer = { providerId: number; name: string; logoPath: string | null };
+/** How a film can be watched in the UK: in a subscription, free, free with ads, to rent or to buy. */
+export type Availability = { stream: Offer[]; free: Offer[]; ads: Offer[]; rent: Offer[]; buy: Offer[] };
+
+export async function getUkAvailability(tmdbId: number): Promise<Availability> {
+  type P = { provider_id: number; provider_name: string; logo_path: string | null; display_priority: number }[];
+  const data = await get<{ results: Record<string, { flatrate?: P; free?: P; ads?: P; rent?: P; buy?: P }> }>(`/movie/${tmdbId}/watch/providers`);
+  const gb = data.results.GB ?? {};
+  const list = (p?: P) => [...(p ?? [])].sort((a, b) => a.display_priority - b.display_priority)
+    .map((x) => ({ providerId: x.provider_id, name: x.provider_name, logoPath: x.logo_path }));
+  return { stream: list(gb.flatrate), free: list(gb.free), ads: list(gb.ads), rent: list(gb.rent), buy: list(gb.buy) };
+}
