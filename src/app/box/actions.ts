@@ -47,8 +47,9 @@ function parseBoxForm(form: FormData): { title: string; colours: string[]; locat
   }
   if (!rows.length) return { error: "Add at least one film." };
 
-  // The box is named after its first film unless you gave it its own title.
-  const title = text(form.get("title")) || rows[0].title;
+  // A single film names its box unless you gave it its own title; a box set must be named.
+  const title = text(form.get("title")) || (rows.length === 1 ? rows[0].title : "");
+  if (!title) return { error: "Give the box set its name, as on the spine." };
   if (!colours.length) return { error: "Pick at least the main spine colour." };
   if (!locationEnum.enumValues.includes(location)) return { error: "Choose where the box is kept." };
   return { title, colours, location, rows };

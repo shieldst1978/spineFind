@@ -38,8 +38,8 @@ export function BoxForm({
   cancelHref: string;
 }) {
   const [state, action, pending] = useActionState<BoxFormState, FormData>(serverAction, {});
-  // The box title follows the first film's title until you type your own
-  // (clearing it goes back to following). Editing an existing box starts typed.
+  // A single film's box title follows the film until you type your own (clearing
+  // it goes back to following); a box set must be named. Editing starts typed.
   const [ownTitle, setOwnTitle] = useState(initial?.title ?? "");
   const [colours, setColours] = useState(() => [0, 1, 2].map((i) => initial?.colours[i] ?? ""));
   const [location, setLocation] = useState(initial?.location ?? "shelf");
@@ -54,7 +54,8 @@ export function BoxForm({
   const removedExisting = (initial?.items.length ?? 0) - rows.filter((r) => r.id).length;
 
   const single = rows.length === 1;
-  const title = ownTitle || rows[0]?.title || "";
+  // A single film names its box; a box set needs its own name (it isn't its first film).
+  const title = ownTitle || (single ? rows[0]?.title || "" : "");
   const setRow = (key: number, patch: Partial<Row>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const addRow = () =>
@@ -112,13 +113,12 @@ export function BoxForm({
 
       <section className="space-y-3">
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Box title</span>
-          <input name="title" value={title} onChange={(e) => setOwnTitle(e.target.value)} className={field}
-            placeholder="Same as the film, or type the box set's name" autoComplete="off" />
-          {!ownTitle && rows[0]?.title && (
-            <span className="block text-xs text-stone-500">
-              {single ? "Same as the film." : "Following the first film. Type the box set's name if it's different, e.g. The Mexico Trilogy."}
-            </span>
+          <span className="text-sm font-medium">{single ? "Box title" : "Box set name"}</span>
+          <input name="title" value={title} onChange={(e) => setOwnTitle(e.target.value)} className={field} required={!single}
+            placeholder={single ? "Same as the film, or type the box's name" : "What's the box set called? e.g. Shawscope Volume Four"} autoComplete="off" />
+          {single && !ownTitle && rows[0]?.title && <span className="block text-xs text-stone-500">Same as the film.</span>}
+          {!single && !title && (
+            <span className="block text-xs text-amber-700 dark:text-amber-400">A box set needs its own name: the one on the spine.</span>
           )}
         </label>
 
