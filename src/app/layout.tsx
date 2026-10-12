@@ -32,7 +32,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Nav />
         {children}
         <footer className="mx-auto w-full max-w-5xl space-y-2 px-4 py-6 text-xs text-stone-500">
-          <Link href="/settings" className="inline-block py-1 text-sm underline">Settings</Link>
+          <p className="flex gap-4">
+            <Link href="/stats" className="inline-block py-1 text-sm underline">Stats</Link>
+            <Link href="/settings" className="inline-block py-1 text-sm underline">Settings</Link>
+          </p>
           <p>
           Film data and posters from{" "}
           <a href="https://www.themoviedb.org" className="underline" target="_blank" rel="noreferrer">TMDB</a>.

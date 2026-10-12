@@ -69,9 +69,12 @@ export default async function WatchesPage({ searchParams }: PageProps<"/watches"
     <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 py-6">
       <header className="mb-4 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Watches</h1>
-        <Link href="/watches/new" className="shrink-0 rounded-lg bg-stone-900 px-3 py-2 text-sm font-medium text-white dark:bg-stone-100 dark:text-stone-900">
-          + Log a watch
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link href="/stats" className="rounded-lg px-3 py-2 text-sm text-stone-600 underline hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800">Stats</Link>
+          <Link href="/watches/new" className="rounded-lg bg-stone-900 px-3 py-2 text-sm font-medium text-white dark:bg-stone-100 dark:text-stone-900">
+            + Log a watch
+          </Link>
+        </div>
       </header>
 
       {(one(sp.logged) || one(sp.updated) || one(sp.deleted)) && (
