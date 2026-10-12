@@ -131,6 +131,12 @@ export async function pickOnServices(c: ServiceCriteria, count = 4): Promise<{ t
   let total = 0;
   let fromTmdb = new Map<number, TmdbSearchResult>();
   let checking = false;
+  const subscribed = new Set(providerIds);
+  // Which of your services a film is on, in a subscription or free (rent/buy doesn't count).
+  const yoursOn = (w: FilmAvailability | null) => w
+    ? [...new Map([...w.stream, ...w.free, ...w.ads].filter((o) => subscribed.has(o.providerId)).map((o) => [o.providerId, o.name])).values()]
+    : [];
+  const servicesById = new Map<number, string[]>();
   if (c.mode === "rewatch") {
     const r = await db.execute<{ tmdb_id: number; total: number }>(sql`
       with log as (
@@ -162,13 +168,24 @@ export async function pickOnServices(c: ServiceCriteria, count = 4): Promise<{ t
     total = first.totalResults;
     const pages = Math.max(1, Math.min(first.totalPages, 25));
     const pool: TmdbSearchResult[] = [];
-    for (let attempt = 0; attempt < 4 && pool.length < count * 3; attempt++) {
+    for (let attempt = 0; attempt < 4 && pool.length < count * 4; attempt++) {
       const page = 1 + Math.floor(Math.random() * pages);
       const res = page === 1 ? first : await discoverOnServices({ providerIds, decade: c.decade, page });
       for (const m of res.results) if (!seen.has(m.tmdbId) && !exclude.has(m.tmdbId) && !pool.some((p) => p.tmdbId === m.tmdbId)) pool.push(m);
     }
     for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-    const chosen = pool.slice(0, count);
+    // TMDB's discover matches "one of your services" and "streaming or free" separately, so a film
+    // you could only rent from a ticked store, streaming elsewhere, gets through. Check each one.
+    const chosen: TmdbSearchResult[] = [];
+    for (let i = 0; i < pool.length && chosen.length < count; i += 6) {
+      const batch = await Promise.all(pool.slice(i, i + 6).map(async (m) => ({ m, on: yoursOn(await availabilityFor(m.tmdbId)) })));
+      for (const { m, on } of batch) {
+        if (on.length && chosen.length < count) {
+          chosen.push(m);
+          servicesById.set(m.tmdbId, on);
+        }
+      }
+    }
     ids = chosen.map((m) => m.tmdbId);
     fromTmdb = new Map(chosen.map((m) => [m.tmdbId, m]));
   }
@@ -190,12 +207,10 @@ export async function pickOnServices(c: ServiceCriteria, count = 4): Promise<{ t
       select i.id, i.title, i.release_year, p.location from items i join products p on p.id = i.product_id
       where i.tmdb_id = f.tmdb_id and p.location <> 'gone' order by p.location = 'shelf' desc limit 1) own on true`)).rows.map((r) => [r.tmdb_id, r]));
 
-  const subscribed = new Set(providerIds);
   const picks = await Promise.all(ids.map(async (id): Promise<ServicePick> => {
     const m = mine.get(id);
     const t = fromTmdb.get(id);
-    const where = await availabilityFor(id);
-    const services = where ? [...new Map([...where.stream, ...where.free, ...where.ads].filter((o) => subscribed.has(o.providerId)).map((o) => [o.providerId, o.name])).values()] : [];
+    const services = servicesById.get(id) ?? yoursOn(await availabilityFor(id));
     return {
       tmdbId: id,
       title: m?.title ?? t?.title ?? "Unknown film",
