@@ -6,10 +6,14 @@ import { Spine } from "@/components/spine";
 import { detailsForItem } from "@/db/films";
 import { pickDecades, pickFilms, randomDecade, type MediaFormat, type PickCriteria } from "@/db/queries";
 import { COLOUR_NAMES } from "@/lib/colours";
+import { ServicesPick } from "./services-pick";
 
 export const metadata: Metadata = { title: "Pick a film · SpineFind" };
 
 const FORMATS: MediaFormat[] = ["4K UltraHD", "Blu Ray", "DVD", "HD DVD"];
+/** Decades offered when picking from your services (newest first). */
+const SERVICE_DECADES = [2020, 2010, 2000, 1990, 1980, 1970, 1960, 1950, 1940, 1930, 1920];
+const randomServiceDecade = () => SERVICE_DECADES[Math.floor(Math.random() * SERVICE_DECADES.length)];
 const field =
   "w-full min-w-0 rounded-lg border border-stone-300 bg-white px-2 py-2 text-base sm:text-sm dark:border-stone-700 dark:bg-stone-900";
 
@@ -18,24 +22,29 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 
 export default async function PickPage({ searchParams }: PageProps<"/pick">) {
   const sp: SP = await searchParams;
+  const fromServices = one(sp.from) === "services";
   const modeParam = one(sp.mode);
   const mode: PickCriteria["mode"] = modeParam === "rewatch" || modeParam === "any" ? modeParam : "unwatched";
   const format = FORMATS.find((f) => f === one(sp.format));
   const colour = COLOUR_NAMES.find((c) => c === one(sp.colour));
   const years = Number(one(sp.years)) || undefined;
   const decadeParam = one(sp.decade);
-  const exclude = one(sp.not).split(",").filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(-30);
+  const exclude = fromServices ? [] : one(sp.not).split(",").filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(-30);
+  const excludeTmdb = fromServices ? one(sp.not).split(",").filter((x) => /^\d{1,9}$/.test(x)).map(Number).slice(-60) : [];
 
   // "Surprise me" picks a decade first, from those with a matching film.
   const randomDecadeWanted = decadeParam === "random";
   const decade = randomDecadeWanted
-    ? ((await randomDecade({ mode, format, colour, notSeenYears: years })) ?? undefined)
+    ? (fromServices ? randomServiceDecade() : ((await randomDecade({ mode, format, colour, notSeenYears: years })) ?? undefined))
     : /^\d{4}$/.test(decadeParam) ? Number(decadeParam) : undefined;
 
-  const [{ total, picks }, decades] = await Promise.all([
-    pickFilms({ mode, format, decade, colour, notSeenYears: mode === "rewatch" ? years : undefined, exclude }),
-    pickDecades({ mode, format, colour }),
-  ]);
+  // On your services, the shelf filters (format, spine colour) don't apply and decades aren't counted.
+  const [{ total, picks }, decades] = fromServices
+    ? [{ total: 0, picks: [] }, SERVICE_DECADES.map((d) => ({ decade: d, n: 0 }))]
+    : await Promise.all([
+        pickFilms({ mode, format, decade, colour, notSeenYears: mode === "rewatch" ? years : undefined, exclude }),
+        pickDecades({ mode, format, colour }),
+      ]);
   // Keep a decade from the URL in the list even if nothing matches it now.
   const chosenDecade = /^\d{4}$/.test(decadeParam) ? Number(decadeParam) : undefined;
   if (chosenDecade !== undefined && !decades.some((d) => d.decade === chosenDecade)) {
@@ -54,7 +63,7 @@ export default async function PickPage({ searchParams }: PageProps<"/pick">) {
     }
     return `/pick?${p}`;
   };
-  const criteriaKey = [mode, decadeParam, format, colour, years].join("|");
+  const criteriaKey = [fromServices, mode, decadeParam, format, colour, years].join("|");
   // "Another" never repeats the pick you just passed on.
   const another = href({ not: [...exclude, pick?.id].filter(Boolean).join(",") });
 
@@ -64,9 +73,12 @@ export default async function PickPage({ searchParams }: PageProps<"/pick">) {
 
       {/* Keyed on the criteria so the dropdowns always show what the page is using. */}
       <AutoSubmitForm key={criteriaKey} action="/pick" className="grid grid-cols-2 gap-2">
+        <select name="from" defaultValue={fromServices ? "services" : "shelf"} className={`${field} col-span-2`} aria-label="Pick from">
+          <option value="shelf">From my shelf</option>
+          <option value="services">On my streaming services</option>
+        </select>
         <label className="col-span-2 space-y-1">
-          <span className="text-sm text-stone-600 dark:text-stone-400">From your shelf</span>
-          <select name="mode" defaultValue={mode} className={field}>
+          <select name="mode" defaultValue={mode} className={field} aria-label="What kind of film">
             <option value="unwatched">Something I haven&apos;t watched</option>
             <option value="rewatch">A rewatch</option>
             <option value="any">Anything</option>
@@ -75,16 +87,16 @@ export default async function PickPage({ searchParams }: PageProps<"/pick">) {
         <select name="decade" defaultValue={decadeParam} className={field} aria-label="Decade">
           <option value="">Any decade</option>
           <option value="random">Surprise me (random decade)</option>
-          {decades.map((d) => <option key={d.decade} value={d.decade}>{d.decade}s ({d.n})</option>)}
+          {decades.map((d) => <option key={d.decade} value={d.decade}>{d.decade}s{d.n ? ` (${d.n})` : ""}</option>)}
         </select>
-        <select name="format" defaultValue={format ?? ""} className={field} aria-label="Format">
+        {!fromServices && <select name="format" defaultValue={format ?? ""} className={field} aria-label="Format">
           <option value="">Any format</option>
           {FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
-        </select>
-        <select name="colour" defaultValue={colour ?? ""} className={field} aria-label="Spine colour">
+        </select>}
+        {!fromServices && <select name="colour" defaultValue={colour ?? ""} className={field} aria-label="Spine colour">
           <option value="">Any spine colour</option>
           {COLOUR_NAMES.map((c) => <option key={c} value={c}>{c} spine</option>)}
-        </select>
+        </select>}
         {mode === "rewatch" ? (
           <select name="years" defaultValue={years ? String(years) : ""} className={field} aria-label="Not seen for">
             <option value="">Any time since</option>
@@ -95,7 +107,9 @@ export default async function PickPage({ searchParams }: PageProps<"/pick">) {
         )}
       </AutoSubmitForm>
 
-      {!pick ? (
+      {fromServices ? (
+        <ServicesPick criteria={{ mode, decade, notSeenYears: mode === "rewatch" ? years : undefined, exclude: excludeTmdb }} href={href} />
+      ) : !pick ? (
         <div className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-stone-600 dark:border-stone-700 dark:text-stone-400">
           <p>Nothing on the shelf matches{exclude.length ? " that you haven't already passed on" : ""}.</p>
           <p className="mt-2 text-sm">

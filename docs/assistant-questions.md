@@ -40,4 +40,8 @@ House rules the assistant should know. Add any you think of.
 - **Like**: what I watch most, judged from the watch log. I don't rate films.
 - **Trivia and facts beyond my data**: look them up on the web, and say when you're unsure or found nothing.
 - **Dates**: I'll give any date that matters (birthdays, anniversaries) in the question; don't assume one.
+- **Recommend from where**: either **on the shelf** (films I own that are on the shelf, not the loft) or **anything**. I'll say which; if I don't, ask.
+- **Haven't watched**: never watched in any format (no watch in the log and not marked "seen before").
+- **In ages**: not watched for more than five years.
+- **Underrated / underwatched**: a high TMDB score with few votes.
 - 

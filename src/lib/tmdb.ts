@@ -214,3 +214,32 @@ export async function getUkAvailability(tmdbId: number): Promise<Availability> {
     .map((x) => ({ providerId: x.provider_id, name: x.provider_name, logoPath: x.logo_path }));
   return { stream: list(gb.flatrate), free: list(gb.free), ads: list(gb.ads), rent: list(gb.rent), buy: list(gb.buy) };
 }
+
+/**
+ * Films streaming (in a subscription, or free) on any of the given UK services, best known first.
+ * Optionally limited to a release decade. TMDB serves up to 500 pages of 20.
+ */
+export async function discoverOnServices(o: { providerIds: number[]; decade?: number; page?: number }): Promise<{ results: TmdbSearchResult[]; totalPages: number; totalResults: number }> {
+  const params: Record<string, string> = {
+    watch_region: "GB",
+    with_watch_providers: o.providerIds.join("|"),
+    with_watch_monetization_types: "flatrate|free|ads",
+    sort_by: "popularity.desc",
+    "vote_count.gte": "200",
+    include_adult: "false",
+    page: String(o.page ?? 1),
+  };
+  if (o.decade !== undefined) {
+    params["primary_release_date.gte"] = `${o.decade}-01-01`;
+    params["primary_release_date.lte"] = `${o.decade + 9}-12-31`;
+  }
+  const data = await get<{ results: { id: number; title: string; release_date?: string; poster_path: string | null; vote_count?: number }[]; total_pages: number; total_results: number }>(
+    "/discover/movie",
+    params,
+  );
+  return {
+    results: data.results.map((r) => ({ tmdbId: r.id, title: r.title, year: yearOf(r.release_date), posterPath: r.poster_path, voteCount: r.vote_count ?? 0 })),
+    totalPages: Math.min(data.total_pages, 500),
+    totalResults: data.total_results,
+  };
+}

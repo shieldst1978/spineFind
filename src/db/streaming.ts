@@ -1,8 +1,8 @@
 import "server-only";
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { db } from ".";
-import { filmAvailability, streamingServices } from "./schema";
-import { getUkAvailability, listUkProviders, tmdbEnabled, type Availability } from "@/lib/tmdb";
+import { filmAvailability, seenFilms, streamingServices } from "./schema";
+import { discoverOnServices, getUkAvailability, listUkProviders, tmdbEnabled, type Availability, type TmdbSearchResult } from "@/lib/tmdb";
 
 const SERVICES_MAX_AGE_DAYS = 30;
 const AVAILABILITY_MAX_AGE_HOURS = 24;
@@ -63,4 +63,154 @@ export async function availabilityFor(tmdbId: number): Promise<FilmAvailability 
   if (!offers) return null;
   const mine = new Set((await db.select({ id: streamingServices.providerId }).from(streamingServices).where(eq(streamingServices.subscribed, true))).map((s) => s.id));
   return { ...offers, mine };
+}
+
+
+export async function subscribedIds(): Promise<number[]> {
+  return (await db.select({ id: streamingServices.providerId }).from(streamingServices).where(eq(streamingServices.subscribed, true))).map((s) => s.id);
+}
+
+let refreshing = false;
+
+/**
+ * Re-checks UK availability for every film in your watch log whose cached
+ * answer is missing or over a day old, so "rewatch on my services" has
+ * something to choose from. Runs in the background; one run at a time.
+ */
+export async function refreshLogAvailability() {
+  if (refreshing || !tmdbEnabled()) return;
+  refreshing = true;
+  try {
+    const stale = (await db.execute<{ tmdb_id: number }>(sql`
+      select distinct w.tmdb_id from watches w left join film_availability a on a.tmdb_id = w.tmdb_id
+      where w.tmdb_id is not null and (a.tmdb_id is null or a.fetched_at < now() - interval '${sql.raw(String(AVAILABILITY_MAX_AGE_HOURS))} hours')`)).rows;
+    let next = 0;
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      while (next < stale.length) {
+        const { tmdb_id } = stale[next++];
+        try {
+          const offers = await getUkAvailability(tmdb_id);
+          await db.insert(filmAvailability).values({ tmdbId: tmdb_id, offers, fetchedAt: new Date() })
+            .onConflictDoUpdate({ target: filmAvailability.tmdbId, set: { offers, fetchedAt: new Date() } });
+        } catch (e) {
+          console.error("TMDB availability failed", tmdb_id, (e as Error).message);
+        }
+      }
+    }));
+  } finally {
+    refreshing = false;
+  }
+}
+
+export type ServicePick = {
+  tmdbId: number;
+  /** Your title if it's in your log or collection, otherwise TMDB's. */
+  title: string;
+  year: number | null;
+  posterPath: string | null;
+  times: number;
+  lastWatched: string | null;
+  owned: { itemId: string; location: string } | null;
+  /** Which of your services it's on (in the subscription or free). */
+  services: string[];
+};
+
+export type ServiceCriteria = { mode: "unwatched" | "rewatch" | "any"; decade?: number; notSeenYears?: number; exclude?: number[] };
+
+/**
+ * Random films on your services. Unwatched (or anything) comes from TMDB's
+ * catalogue of what's on those services, best known first; rewatches come
+ * from your watch log, using the daily availability check.
+ */
+export async function pickOnServices(c: ServiceCriteria, count = 4): Promise<{ total: number; picks: ServicePick[]; checking: boolean }> {
+  const providerIds = await subscribedIds();
+  if (!providerIds.length) return { total: 0, picks: [], checking: false };
+  const exclude = new Set(c.exclude ?? []);
+
+  let ids: number[] = [];
+  let total = 0;
+  let fromTmdb = new Map<number, TmdbSearchResult>();
+  let checking = false;
+  if (c.mode === "rewatch") {
+    const r = await db.execute<{ tmdb_id: number; total: number }>(sql`
+      with log as (
+        select w.tmdb_id, max(w.release_year) as year, max(w.watched_on) as last_watched from watches w where w.tmdb_id is not null group by w.tmdb_id)
+      select l.tmdb_id, count(*) over ()::int as total
+      from log l join film_availability a on a.tmdb_id = l.tmdb_id
+      where exists (
+          select 1 from jsonb_array_elements(coalesce(a.offers->'stream', '[]') || coalesce(a.offers->'free', '[]') || coalesce(a.offers->'ads', '[]')) o
+          where (o->>'providerId')::int in ${providerIds})
+        ${c.decade !== undefined ? sql`and l.year / 10 * 10 = ${c.decade}` : sql``}
+        ${c.notSeenYears ? sql`and l.last_watched < current_date - make_interval(years => ${c.notSeenYears})` : sql``}
+        ${exclude.size ? sql`and l.tmdb_id not in ${[...exclude]}` : sql``}
+      order by random() limit ${count}`);
+    ids = r.rows.map((x) => x.tmdb_id);
+    total = r.rows[0]?.total ?? 0;
+    const [{ n }] = (await db.execute<{ n: number }>(sql`
+      select count(distinct w.tmdb_id)::int as n from watches w left join film_availability a on a.tmdb_id = w.tmdb_id
+      where w.tmdb_id is not null and a.tmdb_id is null`)).rows;
+    checking = n > 0;
+  } else {
+    const seen = c.mode === "unwatched"
+      ? new Set((await db.execute<{ tmdb_id: number }>(sql`
+          select tmdb_id from watches where tmdb_id is not null
+          union select tmdb_id from items where tmdb_id is not null and watched_before_logging
+          union select tmdb_id from seen_films`)).rows.map((x) => x.tmdb_id))
+      : new Set<number>();
+    // A random page from the 25 best-known (500 films), topped up if most of it is already watched.
+    const first = await discoverOnServices({ providerIds, decade: c.decade });
+    total = first.totalResults;
+    const pages = Math.max(1, Math.min(first.totalPages, 25));
+    const pool: TmdbSearchResult[] = [];
+    for (let attempt = 0; attempt < 4 && pool.length < count * 3; attempt++) {
+      const page = 1 + Math.floor(Math.random() * pages);
+      const res = page === 1 ? first : await discoverOnServices({ providerIds, decade: c.decade, page });
+      for (const m of res.results) if (!seen.has(m.tmdbId) && !exclude.has(m.tmdbId) && !pool.some((p) => p.tmdbId === m.tmdbId)) pool.push(m);
+    }
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const chosen = pool.slice(0, count);
+    ids = chosen.map((m) => m.tmdbId);
+    fromTmdb = new Map(chosen.map((m) => [m.tmdbId, m]));
+  }
+  if (!ids.length) return { total, picks: [], checking };
+
+  // Your titles, watch counts and copies for the chosen films.
+  const mine = new Map((await db.execute<{
+    tmdb_id: number; title: string | null; year: number | null; times: number; last_watched: string | null;
+    item_id: string | null; location: string | null; poster_path: string | null;
+  }>(sql`
+    select f.tmdb_id, coalesce(own.title, lw.title, fl.title) as title, coalesce(own.release_year, lw.release_year) as year,
+      (select count(*) from watches w where w.tmdb_id = f.tmdb_id)::int as times,
+      (select max(w.watched_on) from watches w where w.tmdb_id = f.tmdb_id)::text as last_watched,
+      own.id as item_id, own.location::text as location, fl.poster_path
+    from unnest(${sql.raw(`array[${ids.join(",")}]::int[]`)}) as f(tmdb_id)
+    left join films fl on fl.tmdb_id = f.tmdb_id
+    left join lateral (select w.title, w.release_year from watches w where w.tmdb_id = f.tmdb_id order by w.watched_on desc limit 1) lw on true
+    left join lateral (
+      select i.id, i.title, i.release_year, p.location from items i join products p on p.id = i.product_id
+      where i.tmdb_id = f.tmdb_id and p.location <> 'gone' order by p.location = 'shelf' desc limit 1) own on true`)).rows.map((r) => [r.tmdb_id, r]));
+
+  const subscribed = new Set(providerIds);
+  const picks = await Promise.all(ids.map(async (id): Promise<ServicePick> => {
+    const m = mine.get(id);
+    const t = fromTmdb.get(id);
+    const where = await availabilityFor(id);
+    const services = where ? [...new Map([...where.stream, ...where.free, ...where.ads].filter((o) => subscribed.has(o.providerId)).map((o) => [o.providerId, o.name])).values()] : [];
+    return {
+      tmdbId: id,
+      title: m?.title ?? t?.title ?? "Unknown film",
+      year: m?.year ?? t?.year ?? null,
+      posterPath: m?.poster_path ?? t?.posterPath ?? null,
+      times: m?.times ?? 0,
+      lastWatched: m?.last_watched ?? null,
+      owned: m?.item_id ? { itemId: m.item_id, location: m.location! } : null,
+      services,
+    };
+  }));
+  return { total, picks, checking };
+}
+
+/** Remembers that you've seen a film before you started logging (or without logging it). */
+export async function markSeen(tmdbId: number, title: string, year: number | null) {
+  await db.insert(seenFilms).values({ tmdbId, title, releaseYear: year }).onConflictDoNothing();
 }

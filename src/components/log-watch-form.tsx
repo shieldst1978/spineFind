@@ -19,12 +19,17 @@ const KINDS = [
 
 type Format = { id: number; name: string; kind: string; uses: number };
 
-export function LogWatchForm({ formats, today }: { formats: Format[]; today: string }) {
+/** Pre-filled from Pick: the film and, when it's on one of your services, that format. */
+export type LogWatchInitial = { title: string; year: number | null; tmdbId: number; formatId?: number };
+
+export function LogWatchForm({ formats, today, initial }: { formats: Format[]; today: string; initial?: LogWatchInitial }) {
   const [state, action, pending] = useActionState<LogWatchState, FormData>(addWatch, {});
-  const [title, setTitle] = useState("");
-  const [year, setYear] = useState("");
-  const [formatId, setFormatId] = useState(String(formats.find((f) => f.kind !== "disc")?.id ?? formats[0]?.id ?? ""));
-  const [picked, setPicked] = useState<FilmSuggestion | null>(null);
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [year, setYear] = useState(initial?.year ? String(initial.year) : "");
+  const [formatId, setFormatId] = useState(String(initial?.formatId ?? formats.find((f) => f.kind !== "disc")?.id ?? formats[0]?.id ?? ""));
+  const [picked, setPicked] = useState<FilmSuggestion | null>(() => initial
+    ? { title: initial.title, year: initial.year, owned: false, ownedFormat: null, watches: 0, alsoKnownAs: null, tmdbId: initial.tmdbId, posterPath: null, source: "tmdb" }
+    : null);
   const [autoFormat, setAutoFormat] = useState<string | null>(null);
 
   const pick = (s: FilmSuggestion) => {

@@ -267,3 +267,11 @@ export const filmAvailability = pgTable("film_availability", {
   offers: jsonb("offers").notNull(),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Films you've seen at some point but have no logged watch for (and may not own). Count as watched. */
+export const seenFilms = pgTable("seen_films", {
+  tmdbId: integer("tmdb_id").primaryKey(),
+  title: text("title").notNull(),
+  releaseYear: integer("release_year"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
