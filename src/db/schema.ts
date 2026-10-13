@@ -275,3 +275,29 @@ export const seenFilms = pgTable("seen_films", {
   releaseYear: integer("release_year"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** A conversation with the SpineFind assistant. */
+export const assistantConversations = pgTable("assistant_conversations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: text("title").notNull(),
+  ...timestamps,
+});
+
+/**
+ * Every message of a conversation exactly as sent to / received from Claude
+ * (text, tool calls, tool results, thinking), so a conversation can be
+ * continued later. `usage` and `cost_usd` are on Claude's replies.
+ */
+export const assistantMessages = pgTable(
+  "assistant_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id").notNull().references(() => assistantConversations.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    content: jsonb("content").notNull(),
+    usage: jsonb("usage"),
+    costUsd: real("cost_usd"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("assistant_messages_conversation_idx").on(t.conversationId, t.createdAt)],
+);

@@ -8,7 +8,7 @@ const LINKS = [
   // Opens Log a watch, the thing you do most; the log is linked from there.
   { href: "/watches/new", label: "Watches", match: (p: string) => p.startsWith("/watches") },
   { href: "/pick", label: "Pick", match: (p: string) => p.startsWith("/pick") },
-  { href: "/review", label: "Review", match: (p: string) => p.startsWith("/review") },
+  { href: "/ask", label: "Ask", match: (p: string) => p.startsWith("/ask") },
 ];
 
 export function Nav() {

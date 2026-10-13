@@ -32,7 +32,8 @@ the answers; those come from the data later.
 
 ## Words with a special meaning
 
-House rules the assistant should know. Add any you think of.
+House rules the assistant should know. Add any you think of. (The live copy the assistant follows is in
+`src/lib/assistant/prompt.ts`; tell me when you change these and I'll update it.)
 
 - **Watched** (shelf): seen on disc, or marked "seen before, no date".
 - **Watch** (log): any viewing, in any format.

@@ -29,6 +29,7 @@ A personal catalogue of the films on my shelves, searchable by spine colour, and
 | **Log a watch** | `/spinefind/watches/new` | Log any film, owned or not. Suggestions come from your log, shelf and TMDB; picking a film you own sets the format to your copy. New viewing formats can be added inline. |
 | **Watch edit** | `/spinefind/watches/<id>` | Correct a watch's title, year, date or format, or delete it (two taps). Works for imported watches too. |
 | **Pick** | `/spinefind/pick` | Choose a film to watch at random: unwatched / rewatch / anything, by decade (or a random "surprise" decade), format, spine colour, "not seen in N years". Shows TMDB details and which spine to look for. Or **on my streaming services**: unwatched films from TMDB's catalogue of what's on your services (best known first), or rewatches from your log that are on them now; "Seen it before" counts a film as watched, and "Log a watch" opens pre-filled. |
+| **Ask** | `/spinefind/ask` | Chat with an assistant (Claude Sonnet 5.5 on Microsoft Foundry) about your collection and watching: it queries your data read-only, checks UK streaming, searches TMDB and the web. Conversations are saved; a daily cost cap applies. |
 | **Stats** | `/spinefind/stats` (footer, watch log) | Watches, films, rewatches, disc share; watches per year by format; release decades watched vs owned; top directors, actors, genres; most rewatched. All time or one year. |
 | **Settings** | `/spinefind/settings` (footer link) | Tick the UK streaming services you subscribe to. Film pages then show "Where to watch in the UK", with your services first. |
 | **Review** | `/spinefind/review` | Films the TMDB matcher wasn't sure about, most-used first: pick the right one (optionally correcting your year to TMDB's), search TMDB yourself, or say "None of these". |
@@ -103,6 +104,7 @@ src/
     pick/page.tsx               Pick a film; pick/services-pick.tsx: picking on your streaming services
     review/page.tsx             Review TMDB matches; review/actions.ts: confirmMatch, rejectMatch, markAsTv, reopenMatch
     stats/page.tsx              Stats (queries in db/stats.ts)
+    ask/page.tsx                The assistant chat; ask/stream/route.ts streams answers (NDJSON); components/ask-chat.tsx
     settings/page.tsx           Your streaming services; settings/actions.ts: saveServices
     icon.svg, apple-icon.png    Browser and Home Screen icons (public, bypass sign-in)
   components/                   Client-side pieces
@@ -122,6 +124,7 @@ src/
     films.ts                    cacheFilm() (full TMDB record), detailsForItem() (confident title+year match only)
     film-link.ts                linkTmdbId(): a saved film inherits its title+year's TMDB link; enrichFilms()
     enrich.ts                   storeFilm(): writes a full TMDB record (film, people, credits, titles)
+    assistant.ts                Assistant conversations, daily spend, and the read-only SQL runner
     streaming.ts                UK services list and your subscriptions; availabilityFor() (cached a day)
     seed-formats.ts             Starting viewing formats and aliases; disc → media format mapping
   lib/
@@ -130,14 +133,18 @@ src/
     form-values.ts              Shared form parsing: text, year, date (blank = today), UUID
     tmdb.ts                     TMDB API client (search, details, full record, titles, UK release year); retries on 429/5xx
     tmdb-match.ts               matchFilm(): the matching rules (see TMDB enrichment)
+    assistant/prompt.ts         The assistant's instructions: house rules, data description, answer style
+    assistant/tools.ts          Its tools: query_database, where_to_watch, search_tmdb, discover_on_my_services, web search
+    assistant/run.ts            The conversation loop: streaming, tool calls, saving messages, cost
     colours.ts                  Spine colour names and swatches
     base-path.ts                /spinefind and withBase() for plain HTML form actions
   proxy.ts                      Allowed-user check behind Azure sign-in; icons are public
 scripts/
   import.ts                     Rebuild a database from the two spreadsheets, with a report
+  ask.ts                        Ask the assistant one question from the command line (dev)
   enrich.ts                     Match every film to TMDB and store its full record (see TMDB enrichment)
   start.mjs                     Container entry point: run migrations, then start Next
-drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films)
+drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films, 0006 assistant conversations, 0007 assistant views)
 docs/schema.md                  Original data-model design notes (schema.ts is authoritative)
 Dockerfile, .dockerignore       Container image build (personal data and secrets excluded)
 .github/workflows/build.yml     Build and push the image on every push to main
@@ -158,6 +165,8 @@ Dockerfile, .dockerignore       Container image build (personal data and secrets
 | `streaming_services` | A UK streaming / rental service (TMDB's JustWatch list, refreshed monthly) | `name`, `logo_path`, `priority`, `subscribed` (yours) |
 | `seen_films` | Films seen but never logged (marked from Pick) | `tmdb_id`, `title`, `release_year`; count as watched |
 | `film_availability` | Where a film can be watched in the UK, cached for a day | `offers` (stream / free / ads / rent / buy), `fetched_at` |
+| `assistant_conversations`, `assistant_messages` | Saved assistant chats | messages stored exactly as sent to/from Claude (incl. tool calls), with `usage` and `cost_usd` |
+| `assistant_films`, `assistant_watches` (views) | What the assistant queries | one row per film (ownership, shelf, spine, watch counts, TMDB details) / per watch |
 | `tmdb_matches` | The matcher's answer per title + year as entered | `status` (auto / review / confirmed / rejected / unmatched), `tmdb_id`, `method` (why), `candidates` |
 | `review_flags` | Things the import wants checked | `kind`, `status` |
 | `item_watch_status` (view) | Watched status per item | see below |
@@ -187,6 +196,9 @@ Settings (never committed; `.env*` is git-ignored, see `.env.example`):
 | `TMDB_READ_TOKEN` | film lookups | `.env.local`; Azure secret `tmdb-read-token` |
 | `GHCR_READ_TOKEN` | Azure pulling images (classic token, `read:packages`) | `.env.local`; Azure registry credential |
 | `AUTH_ALLOWED_USERS` | `src/proxy.ts` | Azure env var (unset locally = everyone allowed) |
+| `FOUNDRY_RESOURCE`, `FOUNDRY_API_KEY` | the assistant (Claude on Foundry account `spinefind-ai`, Sweden Central) | `.env.local`; Azure env var / secret `foundry-api-key` |
+| `ASSISTANT_DATABASE_URL` | the assistant's read-only login `spinefind_assistant` (SELECT only, 8 s timeout) | `.env.local` = dev; Azure secret `assistant-database-url` = production (`ASSISTANT_PROD_DATABASE_URL` in `.env.local`) |
+| `ASSISTANT_MODEL`, `ASSISTANT_DAILY_LIMIT_USD` | model deployment name (`claude-sonnet-5-5`), daily cost cap (default $2) | Azure env vars |
 | `NEXT_DEPLOYMENT_ID` | version-skew protection | set at image build time to the git commit |
 
 ## Local development

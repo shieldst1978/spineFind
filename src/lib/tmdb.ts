@@ -219,16 +219,18 @@ export async function getUkAvailability(tmdbId: number): Promise<Availability> {
  * Films streaming (in a subscription, or free) on any of the given UK services, best known first.
  * Optionally limited to a release decade. TMDB serves up to 500 pages of 20.
  */
-export async function discoverOnServices(o: { providerIds: number[]; decade?: number; page?: number }): Promise<{ results: TmdbSearchResult[]; totalPages: number; totalResults: number }> {
+export async function discoverOnServices(o: { providerIds: number[]; decade?: number; page?: number; genreId?: number; maxRuntime?: number; sort?: "popularity" | "rating" }): Promise<{ results: TmdbSearchResult[]; totalPages: number; totalResults: number }> {
   const params: Record<string, string> = {
     watch_region: "GB",
     with_watch_providers: o.providerIds.join("|"),
     with_watch_monetization_types: "flatrate|free|ads",
-    sort_by: "popularity.desc",
+    sort_by: o.sort === "rating" ? "vote_average.desc" : "popularity.desc",
     "vote_count.gte": "200",
     include_adult: "false",
     page: String(o.page ?? 1),
   };
+  if (o.genreId) params.with_genres = String(o.genreId);
+  if (o.maxRuntime) params["with_runtime.lte"] = String(o.maxRuntime);
   if (o.decade !== undefined) {
     params["primary_release_date.gte"] = `${o.decade}-01-01`;
     params["primary_release_date.lte"] = `${o.decade + 9}-12-31`;
@@ -243,3 +245,10 @@ export async function discoverOnServices(o: { providerIds: number[]; decade?: nu
     totalResults: data.total_results,
   };
 }
+
+/** TMDB's fixed movie genre ids, by the names used in film records. */
+export const TMDB_GENRES: Record<string, number> = {
+  action: 28, adventure: 12, animation: 16, comedy: 35, crime: 80, documentary: 99, drama: 18, family: 10751,
+  fantasy: 14, history: 36, horror: 27, music: 10402, mystery: 9648, romance: 10749, "science fiction": 878,
+  "tv movie": 10770, thriller: 53, war: 10752, western: 37,
+};
