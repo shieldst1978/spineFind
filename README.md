@@ -21,12 +21,12 @@ A personal catalogue of the films on my shelves, searchable by spine colour, and
 
 | Page | Path | What it's for |
 |---|---|---|
-| **Shelf** | `/spinefind` | Find a box by title (typo-tolerant) or by the spine colours you can see; filter by format, location (shelf / loft / gone) and watched status. Each box is drawn as a spine in its colours. |
+| **Shelf** | `/spinefind/shelf` | Find a box by title (typo-tolerant) or by the spine colours you can see; filter by format, location (shelf / loft / gone) and watched status. Each box is drawn as a spine in its colours. |
 | **Add** | `/spinefind/add` | Add a box: its films first (with TMDB suggestions), then the box title (defaults to the first film), spine colours and where it's kept. One form covers single films and box sets. |
 | **Box edit** | `/spinefind/box/<id>` | Change a box's title, spine, location and films (fix, add, remove); delete the box with a two-tap confirmation. |
 | **Film page** | `/spinefind/item/<id>` | A film in a box: watched status, TMDB details (director, top cast, genres, UK certificate and release date, "also known as"), "I watched this" (defaults to the copy's disc format), "Seen before, no date", watch history with edit links. |
 | **Watches** | `/spinefind/watches` | The watch log as a table: release decade, age when watched, rewatch count ("2nd of 6"), owned copy, format. Filter, sort, page; summary cards for the filtered set. |
-| **Log a watch** | `/spinefind/watches/new` | Log any film, owned or not. Suggestions come from your log, shelf and TMDB; picking a film you own sets the format to your copy. New viewing formats can be added inline. |
+| **Log a watch** | `/spinefind/watches/new` (also the front page, `/spinefind`) | Log any film, owned or not. Suggestions come from your log, shelf and TMDB; picking a film you own sets the format to your copy. New viewing formats can be added inline. |
 | **Watch edit** | `/spinefind/watches/<id>` | Correct a watch's title, year, date or format, or delete it (two taps). Works for imported watches too. |
 | **Pick** | `/spinefind/pick` | Choose a film to watch at random: unwatched / rewatch / anything, by decade (or a random "surprise" decade), format, spine colour, "not seen in N years". Shows TMDB details and which spine to look for. Or **on my streaming services**: unwatched films from TMDB's catalogue of what's on your services (best known first), or rewatches from your log that are on them now; "Seen it before" counts a film as watched, and "Log a watch" opens pre-filled. |
 | **Ask** | `/spinefind/ask` | Chat with an assistant (Claude Sonnet 5.5 on Microsoft Foundry) about your collection and watching: it queries your data read-only, checks UK streaming, searches TMDB and the web. Conversations are saved; a daily cost cap applies. |
@@ -94,7 +94,8 @@ A request, end to end: Safari asks for `/spinefind/watches`. Azure's sign-in lay
 src/
   app/                          Pages (server components) and their server actions
     layout.tsx                  Shell: nav bar, TMDB credit, icons, Home Screen name
-    page.tsx                    Shelf
+    page.tsx                    Front page: redirects to Log a watch (or to the Shelf for an old shelf link)
+    shelf/page.tsx              Shelf
     add/page.tsx                Add a box (uses BoxForm + box/actions)
     box/actions.ts              addBox, updateBox, deleteBox; shared form parsing; TMDB caching of picked films
     box/[id]/page.tsx           Edit / delete a box

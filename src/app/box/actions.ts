@@ -62,7 +62,7 @@ const linkRows = (rows: Row[]) =>
 function shelfLink(title: string, location: Location, flag: string) {
   const p = new URLSearchParams({ q: title, [flag]: "1" });
   if (location !== "shelf") p.set("location", location);
-  return `/?${p}`;
+  return `/shelf?${p}`;
 }
 
 export async function addBox(_prev: BoxFormState, form: FormData): Promise<BoxFormState> {
@@ -154,5 +154,5 @@ export async function deleteBox(productId: string, form: FormData) {
   if (!UUID.test(productId) || text(form.get("confirm")) !== "yes") redirect(`/box/${productId}`);
   const [gone] = await db.delete(products).where(eq(products.id, productId)).returning({ title: products.title });
   revalidatePath("/", "layout");
-  redirect(gone ? `/?${new URLSearchParams({ deleted: gone.title })}` : "/");
+  redirect(gone ? `/shelf?${new URLSearchParams({ deleted: gone.title })}` : "/shelf");
 }

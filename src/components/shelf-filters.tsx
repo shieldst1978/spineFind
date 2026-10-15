@@ -24,7 +24,7 @@ export function ShelfFilters({ q, colours, format, location, watched }: Props) {
   return (
     <form
       ref={form}
-      action={withBase("/")}
+      action={withBase("/shelf")}
       className="space-y-4"
       onChange={(e) => {
         // The title box submits on Enter/Search; everything else applies immediately.
@@ -67,7 +67,7 @@ export function ShelfFilters({ q, colours, format, location, watched }: Props) {
       </div>
 
       {(q || colours.length > 0 || format || watched || (location && location !== "shelf")) && (
-        <Link href="/" className="inline-block text-sm text-stone-600 underline dark:text-stone-400">Clear filters</Link>
+        <Link href="/shelf" className="inline-block text-sm text-stone-600 underline dark:text-stone-400">Clear filters</Link>
       )}
     </form>
   );

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
-  { href: "/", label: "Shelf", match: (p: string) => p === "/" || p.startsWith("/item") || p === "/add" },
+  { href: "/shelf", label: "Shelf", match: (p: string) => p === "/shelf" || p.startsWith("/item") || p.startsWith("/box") || p === "/add" },
   // Opens Log a watch, the thing you do most; the log is linked from there.
   { href: "/watches/new", label: "Watches", match: (p: string) => p.startsWith("/watches") },
   { href: "/pick", label: "Pick", match: (p: string) => p.startsWith("/pick") },

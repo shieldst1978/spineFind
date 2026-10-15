@@ -51,7 +51,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
   return (
     <main className="mx-auto w-full max-w-xl flex-1 space-y-6 px-4 py-6">
       <header>
-        <Link href={`/?q=${encodeURIComponent(item.box.title)}`} className="text-sm text-stone-600 hover:underline dark:text-stone-400">
+        <Link href={`/shelf?q=${encodeURIComponent(item.box.title)}`} className="text-sm text-stone-600 hover:underline dark:text-stone-400">
           ← Shelf
         </Link>
         <div className="mt-2 flex gap-3">

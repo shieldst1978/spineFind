@@ -76,7 +76,7 @@ export async function addWatch(_prev: LogWatchState, form: FormData): Promise<Lo
   // Cast, crew and genres for stats.
   await enrichFilms([tmdbId]);
 
-  revalidatePath("/");
+  revalidatePath("/shelf");
   revalidatePath("/watches");
   redirect(`/watches?${new URLSearchParams({ logged: title })}`);
 }

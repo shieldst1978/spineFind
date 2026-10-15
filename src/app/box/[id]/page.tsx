@@ -13,7 +13,7 @@ export default async function EditBoxPage({ params }: PageProps<"/box/[id]">) {
   if (!UUID.test(id)) notFound();
   const box = await getBox(id);
   if (!box) notFound();
-  const back = `/?q=${encodeURIComponent(box.title)}${box.location !== "shelf" ? `&location=${box.location}` : ""}`;
+  const back = `/shelf?q=${encodeURIComponent(box.title)}${box.location !== "shelf" ? `&location=${box.location}` : ""}`;
   const loggedWatches = box.items.reduce((n, it) => n + it.watches, 0);
 
   return (

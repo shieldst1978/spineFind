@@ -9,7 +9,7 @@ import { items, viewingFormats, watches } from "@/db/schema";
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function back(itemId: string, params?: Record<string, string>): never {
-  revalidatePath("/");
+  revalidatePath("/shelf");
   revalidatePath(`/item/${itemId}`);
   redirect(`/item/${itemId}${params ? `?${new URLSearchParams(params)}` : ""}`);
 }
