@@ -10,6 +10,8 @@ export type TmdbSearchResult = {
   posterPath: string | null;
   /** How many TMDB users have rated it: a good guide to how well known it is. */
   voteCount: number;
+  /** TMDB users' average score, 0-10. */
+  voteAverage: number | null;
 };
 
 export type TmdbMovie = {
@@ -52,7 +54,7 @@ const yearOf = (date?: string | null) => (date && /^\d{4}/.test(date) ? Number(d
 export async function searchMovies(query: string, year?: number): Promise<TmdbSearchResult[]> {
   const params: Record<string, string> = { query, include_adult: "false" };
   if (year) params.year = String(year);
-  const data = await get<{ results: { id: number; title: string; release_date?: string; poster_path: string | null; vote_count?: number }[] }>(
+  const data = await get<{ results: { id: number; title: string; release_date?: string; poster_path: string | null; vote_count?: number; vote_average?: number }[] }>(
     "/search/movie",
     params,
   );
@@ -62,6 +64,7 @@ export async function searchMovies(query: string, year?: number): Promise<TmdbSe
     year: yearOf(r.release_date),
     posterPath: r.poster_path,
     voteCount: r.vote_count ?? 0,
+    voteAverage: r.vote_average ?? null,
   }));
 }
 
@@ -219,28 +222,31 @@ export async function getUkAvailability(tmdbId: number): Promise<Availability> {
  * Films streaming (in a subscription, or free) on any of the given UK services, best known first.
  * Optionally limited to a release decade. TMDB serves up to 500 pages of 20.
  */
-export async function discoverOnServices(o: { providerIds: number[]; decade?: number; page?: number; genreId?: number; maxRuntime?: number; sort?: "popularity" | "rating" }): Promise<{ results: TmdbSearchResult[]; totalPages: number; totalResults: number }> {
+export async function discoverOnServices(o: {
+  providerIds: number[]; decade?: number; page?: number; genreId?: number; maxRuntime?: number; sort?: "popularity" | "rating"; minVotes?: number; maxVotes?: number;
+}): Promise<{ results: TmdbSearchResult[]; totalPages: number; totalResults: number }> {
   const params: Record<string, string> = {
     watch_region: "GB",
     with_watch_providers: o.providerIds.join("|"),
     with_watch_monetization_types: "flatrate|free|ads",
     sort_by: o.sort === "rating" ? "vote_average.desc" : "popularity.desc",
-    "vote_count.gte": "200",
+    "vote_count.gte": String(o.minVotes ?? 200),
     include_adult: "false",
     page: String(o.page ?? 1),
   };
+  if (o.maxVotes) params["vote_count.lte"] = String(o.maxVotes);
   if (o.genreId) params.with_genres = String(o.genreId);
   if (o.maxRuntime) params["with_runtime.lte"] = String(o.maxRuntime);
   if (o.decade !== undefined) {
     params["primary_release_date.gte"] = `${o.decade}-01-01`;
     params["primary_release_date.lte"] = `${o.decade + 9}-12-31`;
   }
-  const data = await get<{ results: { id: number; title: string; release_date?: string; poster_path: string | null; vote_count?: number }[]; total_pages: number; total_results: number }>(
+  const data = await get<{ results: { id: number; title: string; release_date?: string; poster_path: string | null; vote_count?: number; vote_average?: number }[]; total_pages: number; total_results: number }>(
     "/discover/movie",
     params,
   );
   return {
-    results: data.results.map((r) => ({ tmdbId: r.id, title: r.title, year: yearOf(r.release_date), posterPath: r.poster_path, voteCount: r.vote_count ?? 0 })),
+    results: data.results.map((r) => ({ tmdbId: r.id, title: r.title, year: yearOf(r.release_date), posterPath: r.poster_path, voteCount: r.vote_count ?? 0, voteAverage: r.vote_average ?? null })),
     totalPages: Math.min(data.total_pages, 500),
     totalResults: data.total_results,
   };
