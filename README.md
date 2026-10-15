@@ -146,6 +146,7 @@ scripts/
   ask.ts                        Ask the assistant one question from the command line (dev)
   enrich.ts                     Match every film to TMDB and store its full record (see TMDB enrichment)
   start.mjs                     Container entry point: run migrations, then start Next
+  ops/                          PowerShell helpers: deploy, enrichment runs, ask, assistant secrets (see ops/README.md)
 drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films, 0006 assistant conversations, 0007 assistant views)
 docs/schema.md                  Original data-model design notes (schema.ts is authoritative)
 Dockerfile, .dockerignore       Container image build (personal data and secrets excluded)
@@ -227,6 +228,7 @@ Write tests against the **dev** branch only. Before anything that saves, check `
      --image ghcr.io/shieldst1978/spinefind:<full git sha>
    ```
    This creates a new revision (`spinefind--000000N`). The app is in **single-revision mode**: once the new revision is healthy it takes all traffic and the previous one is retired.
+   `scripts/ops/deploy.ps1` does steps 1–2 for the current commit (after you push) and waits until it's healthy.
 3. **Rolling back:** redeploy the previous build, using the same command with the earlier commit's sha (`git log` lists them; every pushed commit has an image). It takes about a minute.
 
 Pages left open across a deploy reload themselves: the build carries a deployment ID, and a lookup that still fails shows a Reload button.
