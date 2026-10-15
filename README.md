@@ -30,6 +30,7 @@ A personal catalogue of the films on my shelves, searchable by spine colour, and
 | **Watch edit** | `/spinefind/watches/<id>` | Correct a watch's title, year, date or format, or delete it (two taps). Works for imported watches too. |
 | **Pick** | `/spinefind/pick` | Choose a film to watch at random: unwatched / rewatch / anything, by decade (or a random "surprise" decade), format, spine colour, "not seen in N years". Shows TMDB details and which spine to look for. Or **on my streaming services**: unwatched films from TMDB's catalogue of what's on your services (best known first), or rewatches from your log that are on them now; "Seen it before" counts a film as watched, and "Log a watch" opens pre-filled. |
 | **Ask** | `/spinefind/ask` | Chat with an assistant (Claude Sonnet 5.5 on Microsoft Foundry) about your collection and watching: it queries your data read-only, checks UK streaming, searches TMDB and the web. Conversations are saved; a daily cost cap applies. |
+| **Seen before?** | `/spinefind/seen` (footer, Stats) | Films you own with no logged watch, best known first, to tick as seen before the log began (2009). Same as "Seen before, no date" on a film page. |
 | **Stats** | `/spinefind/stats` (footer, watch log) | Watches, films, rewatches, disc share; watches per year by format; release decades watched vs owned; top directors, actors, genres; most rewatched. All time or one year. |
 | **Settings** | `/spinefind/settings` (footer link) | Tick the UK streaming services you subscribe to. Film pages then show "Where to watch in the UK", with your services first. |
 | **Review** | `/spinefind/review` | Films the TMDB matcher wasn't sure about, most-used first: pick the right one (optionally correcting your year to TMDB's), search TMDB yourself, or say "None of these". |
@@ -104,6 +105,7 @@ src/
     pick/page.tsx               Pick a film; pick/services-pick.tsx: picking on your streaming services
     review/page.tsx             Review TMDB matches; review/actions.ts: confirmMatch, rejectMatch, markAsTv, reopenMatch
     stats/page.tsx              Stats (queries in db/stats.ts)
+    seen/page.tsx               Seen before? bulk ticking; seen/actions.ts: markSeenBefore
     ask/page.tsx                The assistant chat; ask/stream/route.ts streams answers (NDJSON); components/ask-chat.tsx
     settings/page.tsx           Your streaming services; settings/actions.ts: saveServices
     icon.svg, apple-icon.png    Browser and Home Screen icons (public, bypass sign-in)

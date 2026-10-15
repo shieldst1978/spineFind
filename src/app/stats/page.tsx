@@ -48,7 +48,11 @@ export default async function StatsPage({ searchParams }: PageProps<"/stats">) {
             <Figure value={`${pct(t.disc, t.watches)}%`} label="on disc" />
             <Figure value={t.medianAge ?? "–"} label="median years old when watched" />
             <Figure value={t.avgReleaseYear ? String(t.avgReleaseYear) : "–"} label="average release year" />
-            {!year && <Figure value={`${pct(s.shelf.watched, s.shelf.films)}%`} label={`of the shelf watched (${(s.shelf.films - s.shelf.watched).toLocaleString("en-GB")} to go)`} />}
+            {!year && (
+              <Link href="/seen?where=shelf" className="contents">
+                <Figure value={`${pct(s.shelf.watched, s.shelf.films)}%`} label={`of the shelf watched (${(s.shelf.films - s.shelf.watched).toLocaleString("en-GB")} to go; seen some before 2009?)`} />
+              </Link>
+            )}
             {!year && t.first && <Figure value={t.first.slice(0, 4)} label="first logged watch" />}
           </section>
 
