@@ -116,6 +116,8 @@ export type ItemDetail = {
   itemType: "film" | "tv_season" | "episode";
   format: MediaFormat;
   watchedBeforeLogging: boolean;
+  /** The film marked seen without a logged watch, and where from ("imdb", "seen-page", "pick"); null if not. */
+  filmSeenMark: string | null;
   filmKey: string;
   tmdbId: number | null;
   watched: boolean | null;
@@ -125,11 +127,12 @@ export type ItemDetail = {
 export async function getItem(id: string): Promise<ItemDetail | null> {
   const r = await db.execute<{
     id: string; title: string; release_year: number | null; item_type: ItemDetail["itemType"];
-    format: MediaFormat; watched_before_logging: boolean; film_key: string; tmdb_id: number | null; watched: boolean | null;
+    format: MediaFormat; watched_before_logging: boolean; film_key: string; tmdb_id: number | null; watched: boolean | null; seen_source: string | null;
     box_id: string; box_title: string; spine_colours: string[]; location: Location;
   }>(sql`
     select i.id, i.title, i.release_year, i.item_type, i.format, i.watched_before_logging, i.film_key, i.tmdb_id,
-      s.watched, p.id as box_id, p.title as box_title, p.spine_colours, p.location
+      s.watched, p.id as box_id, p.title as box_title, p.spine_colours, p.location,
+      (select sf.source from seen_films sf where sf.film_key = i.film_key) as seen_source
     from items i
     join products p on p.id = i.product_id
     join item_watch_status s on s.item_id = i.id
@@ -143,6 +146,7 @@ export async function getItem(id: string): Promise<ItemDetail | null> {
     itemType: row.item_type,
     format: row.format,
     watchedBeforeLogging: row.watched_before_logging,
+    filmSeenMark: row.seen_source,
     filmKey: row.film_key,
     tmdbId: row.tmdb_id,
     watched: row.watched,
@@ -465,8 +469,11 @@ export type PickCandidate = {
 
 function pickWhere(c: Omit<PickCriteria, "decade" | "exclude">): SQL[] {
   const where: SQL[] = [sql`i.item_type = 'film'`, sql`p.location = 'shelf'`];
-  if (c.mode === "unwatched") where.push(sql`not s.watched`);
-  if (c.mode === "rewatch") where.push(sql`s.watched`);
+  // Seen the film at all: this disc, a watch in any format, or marked seen (IMDb, Seen before?, Pick).
+  const filmSeen = sql`(s.watched or exists (select 1 from watches fw where fw.film_key = i.film_key)
+    or exists (select 1 from seen_films sf where sf.film_key = i.film_key))`;
+  if (c.mode === "unwatched") where.push(sql`not ${filmSeen}`);
+  if (c.mode === "rewatch") where.push(filmSeen);
   if (c.format) where.push(sql`i.format = ${c.format}`);
   if (c.colour) where.push(sql`${c.colour} = any(p.spine_colours)`);
   return where;

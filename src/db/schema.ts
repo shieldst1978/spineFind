@@ -269,12 +269,20 @@ export const filmAvailability = pgTable("film_availability", {
 });
 
 /** Films you've seen at some point but have no logged watch for (and may not own). Count as watched. */
-export const seenFilms = pgTable("seen_films", {
-  tmdbId: integer("tmdb_id").primaryKey(),
-  title: text("title").notNull(),
-  releaseYear: integer("release_year"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const seenFilms = pgTable(
+  "seen_films",
+  {
+    /** The film (as items/watches film_key): 'tmdb:<id>' when linked, else normalised title|year. */
+    filmKey: text("film_key").primaryKey(),
+    tmdbId: integer("tmdb_id"),
+    title: text("title").notNull(),
+    releaseYear: integer("release_year"),
+    /** Where it was marked: 'pick' (Seen it before), 'seen-page' (Seen before?), 'imdb' (IMDb watch history). */
+    source: text("source").notNull().default("app"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("seen_films_tmdb_idx").on(t.tmdbId)],
+);
 
 /** A conversation with the SpineFind assistant. */
 export const assistantConversations = pgTable("assistant_conversations", {

@@ -43,7 +43,8 @@ export default async function SeenPage({ searchParams }: PageProps<"/seen">) {
         <h1 className="text-2xl font-semibold tracking-tight">Seen before?</h1>
         <p className="text-sm text-stone-600 dark:text-stone-400">
           Films you own with no watch in your log. Your log starts in 2009, so tick any you saw before then (or just never logged).
-          They&apos;ll count as watched everywhere: the shelf, Pick, Stats and Ask. You can undo one from its film page.
+          This marks the film as seen, not your disc: Pick, Stats and Ask will count it, and the shelf&apos;s ✓ stays for discs
+          you&apos;ve actually watched. You can undo one from its film page.
         </p>
         <nav className="flex gap-1" aria-label="Where">
           <Link href="/seen" className={tab(!where)}>All</Link>

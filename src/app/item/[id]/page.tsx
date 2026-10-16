@@ -8,11 +8,14 @@ import { DISC_TO_MEDIA } from "@/db/seed-formats";
 import { availabilityFor, type FilmAvailability } from "@/db/streaming";
 import { normaliseTitle } from "@/lib/match-key";
 import type { Offer } from "@/lib/tmdb";
-import { logWatch, setSeenBefore } from "./actions";
+import { logWatch, setSeenBefore, unmarkFilmSeen } from "./actions";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base dark:border-stone-700 dark:bg-stone-900";
+/** Where a "seen the film" mark came from. */
+const SEEN_SOURCE: Record<string, string> = { imdb: "from your IMDb history", "seen-page": "ticked on Seen before?", pick: "marked in Pick" };
+
 const ERRORS: Record<string, string> = {
   date: "That date doesn't look right. It can't be in the future.",
   format: "Choose where you watched it.",
@@ -75,6 +78,22 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
 
       <section className="rounded-lg border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
         <Status item={item} discWatches={discWatches.length} lastDisc={discWatches[0]?.watchedOn} />
+        {/* The film seen some other way, though not on this disc. */}
+        {isFilm && !item.watched && (history.length > 0 || item.filmSeenMark) && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-stone-600 dark:text-stone-400">
+            <span>
+              You&apos;ve seen the film{" "}
+              {history.length > 0
+                ? `(${history.length} ${history.length === 1 ? "watch" : "watches"} in other formats)`
+                : `(${SEEN_SOURCE[item.filmSeenMark!] ?? "marked seen"})`}, just not on this disc.
+            </span>
+            {item.filmSeenMark && history.length === 0 && (
+              <form action={unmarkFilmSeen.bind(null, item.id)}>
+                <button type="submit" className="rounded px-1.5 py-0.5 text-xs underline hover:bg-stone-100 dark:hover:bg-stone-800">Not seen it</button>
+              </form>
+            )}
+          </div>
+        )}
       </section>
 
       {info && <AboutFilm info={info} title={item.title} />}

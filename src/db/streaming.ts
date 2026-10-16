@@ -161,7 +161,7 @@ export async function pickOnServices(c: ServiceCriteria, count = 4): Promise<{ t
       ? new Set((await db.execute<{ tmdb_id: number }>(sql`
           select tmdb_id from watches where tmdb_id is not null
           union select tmdb_id from items where tmdb_id is not null and watched_before_logging
-          union select tmdb_id from seen_films`)).rows.map((x) => x.tmdb_id))
+          union select tmdb_id from seen_films where tmdb_id is not null`)).rows.map((x) => x.tmdb_id))
       : new Set<number>();
     // A random page from the 25 best-known (500 films), topped up if most of it is already watched.
     const first = await discoverOnServices({ providerIds, decade: c.decade });
@@ -227,5 +227,5 @@ export async function pickOnServices(c: ServiceCriteria, count = 4): Promise<{ t
 
 /** Remembers that you've seen a film before you started logging (or without logging it). */
 export async function markSeen(tmdbId: number, title: string, year: number | null) {
-  await db.insert(seenFilms).values({ tmdbId, title, releaseYear: year }).onConflictDoNothing();
+  await db.insert(seenFilms).values({ filmKey: `tmdb:${tmdbId}`, tmdbId, title, releaseYear: year, source: "pick" }).onConflictDoNothing();
 }

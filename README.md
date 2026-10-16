@@ -145,10 +145,11 @@ src/
 scripts/
   import.ts                     Rebuild a database from the two spreadsheets, with a report
   ask.ts                        Ask the assistant one question from the command line (dev)
+  import-imdb.ts                Import an IMDb watch-history CSV as films seen (see IMDb import)
   enrich.ts                     Match every film to TMDB and store its full record (see TMDB enrichment)
   start.mjs                     Container entry point: run migrations, then start Next
   ops/                          PowerShell helpers: deploy, enrichment runs, ask, assistant secrets (see ops/README.md)
-drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films, 0006 assistant conversations, 0007 assistant views)
+drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films, 0006 assistant conversations, 0007 assistant views, 0008 seen_films keyed by film)
 docs/schema.md                  Original data-model design notes (schema.ts is authoritative)
 Dockerfile, .dockerignore       Container image build (personal data and secrets excluded)
 .github/workflows/build.yml     Build and push the image on every push to main
@@ -167,7 +168,7 @@ Dockerfile, .dockerignore       Container image build (personal data and secrets
 | `film_credits` | Who did what on a film | `role` (cast / crew), `job` (Director, Screenplay, Original Music Composer…), `character`, `billing` (cast order, top 10) |
 | `film_titles` | Every title a film goes by | `kind` (tmdb / original / alternative), `country` (GB, US…) |
 | `streaming_services` | A UK streaming / rental service (TMDB's JustWatch list, refreshed monthly) | `name`, `logo_path`, `priority`, `subscribed` (yours) |
-| `seen_films` | Films seen but never logged (marked from Pick) | `tmdb_id`, `title`, `release_year`; count as watched |
+| `seen_films` | **Films** seen with no logged watch (not discs) | `film_key`, `tmdb_id`, `title`, `release_year`, `source` (`imdb` watch history, `seen-page`, `pick`) |
 | `film_availability` | Where a film can be watched in the UK, cached for a day | `offers` (stream / free / ads / rent / buy), `fetched_at` |
 | `assistant_conversations`, `assistant_messages` | Saved assistant chats | messages stored exactly as sent to/from Claude (incl. tool calls), with `usage` and `cost_usd` |
 | `assistant_films`, `assistant_watches` (views) | What the assistant queries | one row per film (ownership, shelf, spine, watch counts, TMDB details) / per watch |
@@ -252,6 +253,23 @@ Pages left open across a deploy reload themselves: the build carries a deploymen
 - Rules it applies: rows group into a box by product title + spine colours; "Season/Series" titles become TV seasons; `watched_status` becomes "seen before logging"; format spellings fold into `viewing_formats`; watches before 23 Jan 2026 are marked "format from memory" (aNote era).
 
 A OneDrive sync to write app changes back to the spreadsheets is planned but not built.
+
+## Films seen vs discs watched
+
+Two separate things:
+
+- **Disc watched** (the shelf's ✓, `item_watch_status`): that copy has been watched: a disc-format watch in the log, or
+  "Seen before, no date" on its film page (`items.watched_before_logging`).
+- **Film seen**: the film has been seen in any way: a watch in any format, a watched disc, or a `seen_films` mark (IMDb
+  history, the Seen before? page, Pick's "Seen it before"). Pick's "haven't watched" / "rewatch", the assistant and the
+  Seen before? page go by this. A film page shows "You've seen the film … just not on this disc", with an undo.
+
+## IMDb import
+
+`scripts/import-imdb.ts` (runner `scripts/ops/run-import-imdb.ps1`, dev by default, `-Production` for live) reads an IMDb
+watch-history CSV (`imdb_exports/`, git-ignored), skips TV, matches each film to TMDB by IMDb id, and marks films with no
+logged watch as seen (`source = imdb`). It never marks discs watched, keeps your own titles where SpineFind has the film,
+and fetches full TMDB records for films new to SpineFind. Re-runnable.
 
 ## TMDB enrichment
 

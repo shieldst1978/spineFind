@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { items, viewingFormats, watches } from "@/db/schema";
+import { items, seenFilms, viewingFormats, watches } from "@/db/schema";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -47,5 +47,14 @@ export async function setSeenBefore(itemId: string, seen: boolean) {
     .update(items)
     .set({ watchedBeforeLogging: seen, updatedAt: new Date() })
     .where(and(eq(items.id, itemId), eq(items.itemType, "film")));
+  back(itemId);
+}
+
+
+/** Removes a "seen the film" mark (IMDb, Seen before?, Pick) for this item's film. Disc watches are untouched. */
+export async function unmarkFilmSeen(itemId: string) {
+  const [item] = await db.select({ filmKey: items.filmKey }).from(items).where(eq(items.id, itemId));
+  if (item?.filmKey) await db.delete(seenFilms).where(eq(seenFilms.filmKey, item.filmKey));
+  revalidatePath("/", "layout");
   back(itemId);
 }

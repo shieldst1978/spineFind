@@ -35,6 +35,16 @@ async function rememberPick(key: string, title: string, year: number | null, tmd
     where tmdb_matches.status <> 'confirmed'`);
   await db.execute(sql`update items set tmdb_id = ${tmdbId} where match_key = ${key} and tmdb_id is null`);
   await db.execute(sql`update watches set tmdb_id = ${tmdbId} where match_key = ${key} and tmdb_id is null`);
+  await relinkSeen(key, tmdbId);
+}
+
+/** A "film seen" mark made while a film was unlinked (keyed by title|year) moves to its TMDB key once linked. */
+export async function relinkSeen(matchKey: string, tmdbId: number) {
+  await db.execute(sql`
+    insert into seen_films (film_key, tmdb_id, title, release_year, source, created_at)
+    select ${`tmdb:${tmdbId}`}, ${tmdbId}, title, release_year, source, created_at from seen_films where film_key = ${matchKey}
+    on conflict (film_key) do nothing`);
+  await db.execute(sql`delete from seen_films where film_key = ${matchKey}`);
 }
 
 /** Fetches cast, crew, genres etc. for films not yet stored. Failures are logged and skipped. */

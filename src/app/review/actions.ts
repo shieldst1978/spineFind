@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { storeFilm } from "@/db/enrich";
+import { relinkSeen } from "@/db/film-link";
 import { films, tmdbMatches } from "@/db/schema";
 import { text } from "@/lib/form-values";
 import { getMovieFull } from "@/lib/tmdb";
@@ -43,6 +44,7 @@ export async function confirmMatch(matchKey: string, form: FormData) {
       }
     }
   });
+  await relinkSeen(matchKey, tmdbId);
 
   revalidatePath("/", "layout");
   redirect(backTo(form));

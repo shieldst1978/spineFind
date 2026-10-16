@@ -132,7 +132,7 @@ export async function runTool(name: string, input: Input): Promise<string> {
         const seen = input.include_watched ? new Set<number>() : new Set((await db.execute<{ tmdb_id: number }>(sql`
           select tmdb_id from watches where tmdb_id is not null
           union select tmdb_id from items where tmdb_id is not null and watched_before_logging
-          union select tmdb_id from seen_films`)).rows.map((r) => r.tmdb_id));
+          union select tmdb_id from seen_films where tmdb_id is not null`)).rows.map((r) => r.tmdb_id));
         // Discover can include films only rentable from a ticked store; check each and keep those streaming on his services.
         const mine = new Set(providerIds);
         const candidates = res.results.filter((m) => !seen.has(m.tmdbId)).slice(0, 12);

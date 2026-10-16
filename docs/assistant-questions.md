@@ -35,7 +35,8 @@ the answers; those come from the data later.
 House rules the assistant should know. Add any you think of. (The live copy the assistant follows is in
 `src/lib/assistant/prompt.ts`; tell me when you change these and I'll update it.)
 
-- **Watched** (shelf): seen on disc, or marked "seen before, no date".
+- **Watched** (a film): seen in any way: a watch in the log, or marked seen (IMDb history, Seen before?, Pick).
+- **Disc watched** (the shelf's ✓): that copy has been watched (a disc watch, or "Seen before, no date" on its film page). A film can be seen but its disc not yet watched.
 - **Watch** (log): any viewing, in any format.
 - **Year**: the release year as I entered it, which is usually the UK one.
 - **Like**: what I watch most, judged from the watch log. I don't rate films.

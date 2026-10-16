@@ -7,14 +7,17 @@ import { db } from "@/db";
 import { text } from "@/lib/form-values";
 
 /**
- * Marks the ticked films as seen before you started logging: every copy of
- * each film gets "seen before, no date", the same as the film page's button.
+ * Marks the ticked films as seen (the film, not your disc): they go in
+ * seen_films, so Pick, Stats and Ask count them as watched while the
+ * shelf's ✓ stays for discs you've actually watched.
  */
 export async function markSeenBefore(form: FormData) {
   const keys = [...new Set(form.getAll("film").map((v) => text(v)).filter((k) => k && k.length < 300))];
   if (keys.length) {
-    await db.execute(sql`update items set watched_before_logging = true, updated_at = now()
-      where item_type = 'film' and not watched_before_logging and film_key in ${keys}`);
+    await db.execute(sql`
+      insert into seen_films (film_key, tmdb_id, title, release_year, source)
+      select film_key, tmdb_id, title, release_year, 'seen-page' from assistant_films where film_key in ${keys}
+      on conflict (film_key) do nothing`);
   }
   revalidatePath("/", "layout");
   const where = text(form.get("where"));

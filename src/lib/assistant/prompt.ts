@@ -4,7 +4,10 @@
  */
 
 const HOUSE_RULES = `
-- Watched (a film on the shelf): seen on disc, or marked "seen before, no date". A watch (in the log) is any viewing, in any format.
+- Watched: Tim has seen the film, in any way: a watch in the log (any format), a disc marked seen before logging, or the film
+  marked seen (e.g. from his IMDb watch history). A disc being watched is separate: the shelf's ✓ means that copy has been
+  watched (disc_watches > 0, or marked seen before logging). A film can be seen but its disc not yet watched.
+  A watch (in the log) is any viewing, in any format.
 - Haven't watched: never watched in any format. No watch in the log and not marked seen before. In assistant_films that's "not watched".
 - In ages: not watched for more than five years.
 - Like: Tim doesn't rate films. "What I like" means what he watches most, judged from the watch log.
@@ -22,7 +25,7 @@ assistant_films: one row per film Tim owns, has logged, or marked seen. Identity
   owned (bool), owned_where ('shelf' or 'loft'; null if not owned), owned_formats (text[]: '4K UltraHD', 'Blu Ray', 'DVD', 'HD DVD'),
   box_title (the box it's in, e.g. a box set's name), spine_colours (e.g. 'Black / Gold', main colour first),
   times_watched (logged watches, any format), disc_watches, first_watched, last_watched (dates),
-  watched (bool, per the house rules), seen_before_no_date (bool),
+  watched (bool: the film seen at all, per the house rules), seen_before_no_date (bool: seen but with no logged watch, e.g. from IMDb),
   genres (text[]), runtime_minutes, uk_certificate (BBFC: 'U', 'PG', '12', '12A', '15', '18'), uk_release_date,
   directors (text[]), top_cast (text[], billing order, up to 10), keywords (text[]), original_language, countries (text[]),
   collection_name (e.g. 'The Dark Knight Collection'), vote_average (TMDB, 0-10), vote_count, overview.
@@ -35,7 +38,8 @@ assistant_watches: one row per viewing.
 Other tables, if you need them: products (boxes: title, spine_colours text[], location), items (films in boxes),
 people (tmdb_person_id, name), film_credits (tmdb_id, person_id, role 'cast'|'crew', job e.g. 'Director', 'Screenplay',
 'Original Music Composer', 'Director of Photography', 'Editor', character, billing), film_titles (tmdb_id, title, kind, country:
-other titles a film is known by), streaming_services (provider_id, name, subscribed), seen_films.
+other titles a film is known by), streaming_services (provider_id, name, subscribed),
+seen_films (film_key, tmdb_id, title, release_year, source: 'imdb' = his IMDb watch history, 'seen-page' or 'pick' = marked in the app).
 
 SQL tips: arrays use = any(...) or && / @>; match titles with ilike; count films with count(distinct film_key);
 always add a LIMIT to row lists; random picks use order by random(). Don't select overview unless you need it.
