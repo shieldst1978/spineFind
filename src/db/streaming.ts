@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db } from ".";
 import { filmAvailability, seenFilms, streamingServices } from "./schema";
 import { discoverOnServices, getUkAvailability, listUkProviders, tmdbEnabled, type Availability, type TmdbSearchResult } from "@/lib/tmdb";
@@ -70,7 +70,7 @@ export async function subscribedIds(): Promise<number[]> {
   return (await db.select({ id: streamingServices.providerId }).from(streamingServices).where(eq(streamingServices.subscribed, true))).map((s) => s.id);
 }
 
-let refreshing = false;
+const refreshing = new Set<string>();
 
 /**
  * Re-checks UK availability for every film in your watch log whose cached
@@ -78,12 +78,22 @@ let refreshing = false;
  * something to choose from. Runs in the background; one run at a time.
  */
 export async function refreshLogAvailability() {
-  if (refreshing || !tmdbEnabled()) return;
-  refreshing = true;
+  await refreshStale("log", sql`select distinct tmdb_id from watches where tmdb_id is not null`);
+}
+
+/** The same for the watchlist, so its page and Pick know what's streaming. */
+export async function refreshWatchlistAvailability() {
+  await refreshStale("watchlist", sql`select tmdb_id from watchlist`);
+}
+
+/** Fetches availability for the films `ids` selects whose cached answer is missing or stale. One run per name at a time. */
+async function refreshStale(name: string, ids: SQL) {
+  if (refreshing.has(name) || !tmdbEnabled()) return;
+  refreshing.add(name);
   try {
     const stale = (await db.execute<{ tmdb_id: number }>(sql`
-      select distinct w.tmdb_id from watches w left join film_availability a on a.tmdb_id = w.tmdb_id
-      where w.tmdb_id is not null and (a.tmdb_id is null or a.fetched_at < now() - interval '${sql.raw(String(AVAILABILITY_MAX_AGE_HOURS))} hours')`)).rows;
+      select x.tmdb_id from (${ids}) x left join film_availability a on a.tmdb_id = x.tmdb_id
+      where a.tmdb_id is null or a.fetched_at < now() - interval '${sql.raw(String(AVAILABILITY_MAX_AGE_HOURS))} hours'`)).rows;
     let next = 0;
     await Promise.all(Array.from({ length: 4 }, async () => {
       while (next < stale.length) {
@@ -98,7 +108,7 @@ export async function refreshLogAvailability() {
       }
     }));
   } finally {
-    refreshing = false;
+    refreshing.delete(name);
   }
 }
 
@@ -228,4 +238,6 @@ export async function pickOnServices(c: ServiceCriteria, count = 4): Promise<{ t
 /** Remembers that you've seen a film before you started logging (or without logging it). */
 export async function markSeen(tmdbId: number, title: string, year: number | null) {
   await db.insert(seenFilms).values({ filmKey: `tmdb:${tmdbId}`, tmdbId, title, releaseYear: year, source: "pick" }).onConflictDoNothing();
+  // Seen, so off the watchlist (raw SQL: watchlist.ts imports this module).
+  await db.execute(sql`delete from watchlist where film_key = ${`tmdb:${tmdbId}`}`);
 }

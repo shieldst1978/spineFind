@@ -30,9 +30,10 @@ A personal catalogue of the films on my shelves, searchable by spine colour, and
 | **Watch edit** | `/spinefind/watches/<id>` | Correct a watch's title, year, date or format, or delete it (two taps). Works for imported watches too. |
 | **Pick** | `/spinefind/pick` | Choose a film to watch at random: unwatched / rewatch / anything, by decade (or a random "surprise" decade), format, spine colour, "not seen in N years". Shows TMDB details and which spine to look for. Or **on my streaming services**: unwatched films from TMDB's catalogue of what's on your services (best known first), or rewatches from your log that are on them now; "Seen it before" counts a film as watched, and "Log a watch" opens pre-filled. |
 | **Ask** | `/spinefind/ask` | Chat with an assistant (Claude Sonnet 5.5 on Microsoft Foundry) about your collection and watching: it queries your data read-only, checks UK streaming, searches TMDB and the web. Conversations are saved; a daily cost cap applies. |
+| **Watchlist** | `/spinefind/watchlist` (footer) | Your IMDb watchlist (uploaded in Settings): each film with your copy (shelf/loft, box, spine) or where it's streaming on your services; views for "watch tonight", shelf, services; "Watched it" opens Log a watch pre-filled. Films leave the list once watched or marked seen. |
 | **Seen before?** | `/spinefind/seen` (footer, Stats) | Films you own with no logged watch, best known first, to tick as seen before the log began (2009). Same as "Seen before, no date" on a film page. |
 | **Stats** | `/spinefind/stats` (footer, watch log) | Watches, films, rewatches, disc share; watches per year by format; release decades watched vs owned; top directors, actors, genres; most rewatched. All time or one year. |
-| **Settings** | `/spinefind/settings` (footer link) | Tick the UK streaming services you subscribe to. Film pages then show "Where to watch in the UK", with your services first. |
+| **Settings** | `/spinefind/settings` (footer link) | Upload your IMDb watchlist CSV (adds new films, drops ones removed on IMDb, skips TV and films already seen). Tick the UK streaming services you subscribe to. Film pages then show "Where to watch in the UK", with your services first. |
 | **Review** | `/spinefind/review` | Films the TMDB matcher wasn't sure about, most-used first: pick the right one (optionally correcting your year to TMDB's), search TMDB yourself, or say "None of these". |
 
 ## How it fits together
@@ -106,6 +107,7 @@ src/
     pick/page.tsx               Pick a film; pick/services-pick.tsx: picking on your streaming services
     review/page.tsx             Review TMDB matches; review/actions.ts: confirmMatch, rejectMatch, markAsTv, reopenMatch
     stats/page.tsx              Stats (queries in db/stats.ts)
+    watchlist/page.tsx          Watchlist; settings/watchlist-actions.ts: uploadWatchlist (sync from an IMDb CSV)
     seen/page.tsx               Seen before? bulk ticking; seen/actions.ts: markSeenBefore
     ask/page.tsx                The assistant chat; ask/stream/route.ts streams answers (NDJSON); components/ask-chat.tsx
     settings/page.tsx           Your streaming services; settings/actions.ts: saveServices
@@ -127,6 +129,7 @@ src/
     films.ts                    cacheFilm() (full TMDB record), detailsForItem() (confident title+year match only)
     film-link.ts                linkTmdbId(): a saved film inherits its title+year's TMDB link; enrichFilms()
     enrich.ts                   storeFilm(): writes a full TMDB record (film, people, credits, titles)
+    watchlist.ts                syncWatchlist (IMDb CSV), removeFromWatchlist, listWatchlist, pickFromWatchlist
     assistant.ts                Assistant conversations, daily spend, and the read-only SQL runner
     streaming.ts                UK services list and your subscriptions; availabilityFor() (cached a day)
     seed-formats.ts             Starting viewing formats and aliases; disc → media format mapping
@@ -149,7 +152,7 @@ scripts/
   enrich.ts                     Match every film to TMDB and store its full record (see TMDB enrichment)
   start.mjs                     Container entry point: run migrations, then start Next
   ops/                          PowerShell helpers: deploy, enrichment runs, ask, assistant secrets (see ops/README.md)
-drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films, 0006 assistant conversations, 0007 assistant views, 0008 seen_films keyed by film)
+drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films, 0006 assistant conversations, 0007 assistant views, 0008 seen_films keyed by film, 0009 watchlist, 0010 assistant_watches.logged_at)
 docs/schema.md                  Original data-model design notes (schema.ts is authoritative)
 Dockerfile, .dockerignore       Container image build (personal data and secrets excluded)
 .github/workflows/build.yml     Build and push the image on every push to main
@@ -169,6 +172,7 @@ Dockerfile, .dockerignore       Container image build (personal data and secrets
 | `film_titles` | Every title a film goes by | `kind` (tmdb / original / alternative), `country` (GB, US…) |
 | `streaming_services` | A UK streaming / rental service (TMDB's JustWatch list, refreshed monthly) | `name`, `logo_path`, `priority`, `subscribed` (yours) |
 | `seen_films` | **Films** seen with no logged watch (not discs) | `film_key`, `tmdb_id`, `title`, `release_year`, `source` (`imdb` watch history, `seen-page`, `pick`) |
+| `watchlist` | Films you want to watch (from your IMDb watchlist) | `film_key`, `tmdb_id`, `imdb_id`, `title`, `release_year`, `added_on`, `source` |
 | `film_availability` | Where a film can be watched in the UK, cached for a day | `offers` (stream / free / ads / rent / buy), `fetched_at` |
 | `assistant_conversations`, `assistant_messages` | Saved assistant chats | messages stored exactly as sent to/from Claude (incl. tool calls), with `usage` and `cost_usd` |
 | `assistant_films`, `assistant_watches` (views) | What the assistant queries | one row per film (ownership, shelf, spine, watch counts, TMDB details) / per watch |

@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
+import { removeFromWatchlist } from "@/db/watchlist";
 import { text } from "@/lib/form-values";
 
 /**
@@ -18,6 +19,7 @@ export async function markSeenBefore(form: FormData) {
       insert into seen_films (film_key, tmdb_id, title, release_year, source)
       select film_key, tmdb_id, title, release_year, 'seen-page' from assistant_films where film_key in ${keys}
       on conflict (film_key) do nothing`);
+    await removeFromWatchlist(keys);
   }
   revalidatePath("/", "layout");
   const where = text(form.get("where"));

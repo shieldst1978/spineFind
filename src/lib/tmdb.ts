@@ -258,3 +258,9 @@ export const TMDB_GENRES: Record<string, number> = {
   fantasy: 14, history: 36, horror: 27, music: 10402, mystery: 9648, romance: 10749, "science fiction": 878,
   "tv movie": 10770, thriller: 53, war: 10752, western: 37,
 };
+
+/** The TMDB film for an IMDb id (tt…), or null if TMDB has none (e.g. it's a TV series). */
+export async function findByImdbId(imdbId: string): Promise<number | null> {
+  const data = await get<{ movie_results?: { id: number }[] }>(`/find/${imdbId}`, { external_source: "imdb_id" });
+  return data.movie_results?.[0]?.id ?? null;
+}

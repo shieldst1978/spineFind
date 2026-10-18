@@ -55,5 +55,8 @@ export async function enrichFilms(ids: (number | null)[]) {
   const done = await db.execute<{ tmdb_id: number }>(sql`
     select tmdb_id from films where enriched_at is not null and tmdb_id in ${wanted}`);
   const known = new Set(done.rows.map((r) => r.tmdb_id));
-  await Promise.all(wanted.filter((id) => !known.has(id)).map((id) => cacheFilm(id)));
+  // Four at a time: a watchlist upload can bring hundreds, and TMDB rate-limits bursts.
+  const todo = wanted.filter((id) => !known.has(id));
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(4, todo.length) }, async () => { while (next < todo.length) await cacheFilm(todo[next++]); }));
 }

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { items, seenFilms, viewingFormats, watches } from "@/db/schema";
+import { removeFromWatchlist } from "@/db/watchlist";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -38,6 +39,7 @@ export async function logWatch(itemId: string, form: FormData) {
     matchKey: item.matchKey,
     tmdbId: item.tmdbId,
   });
+  await removeFromWatchlist([item.filmKey]);
   back(itemId, { logged: watchedOn });
 }
 

@@ -12,21 +12,12 @@ import { readFileSync } from "node:fs";
 import { createDb } from "../src/db/client";
 import { storeFilm } from "../src/db/enrich";
 import { IMDB_FILM_TYPES, parseCsv } from "../src/lib/csv";
-import { getMovieFull } from "../src/lib/tmdb";
+import { findByImdbId, getMovieFull } from "../src/lib/tmdb";
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((a) => a.startsWith("--")));
 const file = args.find((a) => !a.startsWith("--")) ?? "imdb_exports/imdb_watch_history.csv";
 
-async function tmdbForImdb(imdbId: string): Promise<number | null> {
-  const r = await fetch(`https://api.themoviedb.org/3/find/${imdbId}?external_source=imdb_id`, {
-    headers: { Authorization: `Bearer ${process.env.TMDB_READ_TOKEN}` },
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!r.ok) throw new Error(`TMDB find ${imdbId}: ${r.status}`);
-  const j = (await r.json()) as { movie_results?: { id: number }[] };
-  return j.movie_results?.[0]?.id ?? null;
-}
 
 async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {
   let next = 0;
@@ -53,7 +44,7 @@ async function main() {
   // IMDb id → TMDB id: known films first, then TMDB's lookup.
   const known = new Map((await client.query<{ imdb_id: string; tmdb_id: number }>(`select imdb_id, tmdb_id from films where imdb_id is not null`)).rows.map((r) => [r.imdb_id, r.tmdb_id]));
   const tmdb = new Map<string, number | null>();
-  await pool(films.filter((r) => !known.has(r.Const)), 5, async (r) => { tmdb.set(r.Const, await tmdbForImdb(r.Const).catch(() => null)); });
+  await pool(films.filter((r) => !known.has(r.Const)), 5, async (r) => { tmdb.set(r.Const, await findByImdbId(r.Const).catch(() => null)); });
   const idOf = (r: Record<string, string>) => known.get(r.Const) ?? tmdb.get(r.Const) ?? null;
 
   const inApp = new Map((await client.query<{ tmdb_id: number; title: string; release_year: number | null; times_watched: number }>(
@@ -91,6 +82,8 @@ async function main() {
     );
   }
   console.log(`marked ${toMark.length} films as seen (source imdb)`);
+  const off = await client.query<{ n: number }>(`with d as (delete from watchlist where film_key = any($1::text[]) returning 1) select count(*)::int as n from d`, [toMark.map((m) => m.key)]);
+  console.log(`taken off the watchlist (now seen): ${off.rows[0].n}`);
 
   // Films new to SpineFind get cast, crew, genres etc. so Stats, Pick and Ask can use them.
   const enriched = new Set((await client.query<{ tmdb_id: number }>(`select tmdb_id from films where enriched_at is not null`)).rows.map((r) => r.tmdb_id));

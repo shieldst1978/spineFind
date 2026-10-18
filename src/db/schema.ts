@@ -309,3 +309,23 @@ export const assistantMessages = pgTable(
   },
   (t) => [index("assistant_messages_conversation_idx").on(t.conversationId, t.createdAt)],
 );
+
+/**
+ * Films Tim wants to watch. Synced from his IMDb watchlist (source 'imdb'; an upload adds new films
+ * and drops ones gone from IMDb). A film leaves the list once it's watched or marked seen.
+ */
+export const watchlist = pgTable(
+  "watchlist",
+  {
+    filmKey: text("film_key").primaryKey(),
+    tmdbId: integer("tmdb_id").notNull(),
+    imdbId: text("imdb_id"),
+    title: text("title").notNull(),
+    releaseYear: integer("release_year"),
+    /** When it went on the list (IMDb's "Created"). */
+    addedOn: date("added_on"),
+    source: text("source").notNull().default("imdb"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("watchlist_tmdb_idx").on(t.tmdbId)],
+);

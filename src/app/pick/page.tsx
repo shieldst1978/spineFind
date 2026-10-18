@@ -22,7 +22,10 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 
 export default async function PickPage({ searchParams }: PageProps<"/pick">) {
   const sp: SP = await searchParams;
-  const fromServices = one(sp.from) === "services";
+  const source = one(sp.from) === "services" ? "services" : one(sp.from) === "watchlist" ? "watchlist" : "shelf";
+  // Streaming and the watchlist pick TMDB films (by TMDB id), not shelf items.
+  const fromServices = source !== "shelf";
+  const tonightOnly = one(sp.avail) === "tonight";
   const modeParam = one(sp.mode);
   const mode: PickCriteria["mode"] = modeParam === "rewatch" || modeParam === "any" ? modeParam : "unwatched";
   const format = FORMATS.find((f) => f === one(sp.format));
@@ -63,7 +66,7 @@ export default async function PickPage({ searchParams }: PageProps<"/pick">) {
     }
     return `/pick?${p}`;
   };
-  const criteriaKey = [fromServices, mode, decadeParam, format, colour, years].join("|");
+  const criteriaKey = [source, mode, tonightOnly, decadeParam, format, colour, years].join("|");
   // "Another" never repeats the pick you just passed on.
   const another = href({ not: [...exclude, pick?.id].filter(Boolean).join(",") });
 
@@ -73,16 +76,24 @@ export default async function PickPage({ searchParams }: PageProps<"/pick">) {
 
       {/* Keyed on the criteria so the dropdowns always show what the page is using. */}
       <AutoSubmitForm key={criteriaKey} action="/pick" className="grid grid-cols-2 gap-2">
-        <select name="from" defaultValue={fromServices ? "services" : "shelf"} className={`${field} col-span-2`} aria-label="Pick from">
+        <select name="from" defaultValue={source} className={`${field} col-span-2`} aria-label="Pick from">
           <option value="shelf">From my shelf</option>
           <option value="services">On my streaming services</option>
+          <option value="watchlist">From my watchlist</option>
         </select>
         <label className="col-span-2 space-y-1">
-          <select name="mode" defaultValue={mode} className={field} aria-label="What kind of film">
-            <option value="unwatched">Something I haven&apos;t watched</option>
-            <option value="rewatch">A rewatch</option>
-            <option value="any">Anything</option>
-          </select>
+          {source === "watchlist" ? (
+            <select name="avail" defaultValue={tonightOnly ? "tonight" : ""} className={field} aria-label="Which films">
+              <option value="">Anything on the list</option>
+              <option value="tonight">Only what I can watch tonight (shelf or my services)</option>
+            </select>
+          ) : (
+            <select name="mode" defaultValue={mode} className={field} aria-label="What kind of film">
+              <option value="unwatched">Something I haven&apos;t watched</option>
+              <option value="rewatch">A rewatch</option>
+              <option value="any">Anything</option>
+            </select>
+          )}
         </label>
         <select name="decade" defaultValue={decadeParam} className={field} aria-label="Decade">
           <option value="">Any decade</option>
@@ -97,7 +108,7 @@ export default async function PickPage({ searchParams }: PageProps<"/pick">) {
           <option value="">Any spine colour</option>
           {COLOUR_NAMES.map((c) => <option key={c} value={c}>{c} spine</option>)}
         </select>}
-        {mode === "rewatch" ? (
+        {mode === "rewatch" && source !== "watchlist" ? (
           <select name="years" defaultValue={years ? String(years) : ""} className={field} aria-label="Not seen for">
             <option value="">Any time since</option>
             {[1, 2, 3, 5, 10].map((y) => <option key={y} value={y}>Not seen in {y}+ {y === 1 ? "year" : "years"}</option>)}
@@ -108,7 +119,8 @@ export default async function PickPage({ searchParams }: PageProps<"/pick">) {
       </AutoSubmitForm>
 
       {fromServices ? (
-        <ServicesPick criteria={{ mode, decade, notSeenYears: mode === "rewatch" ? years : undefined, exclude: excludeTmdb }} href={href} />
+        <ServicesPick source={source} tonightOnly={tonightOnly} href={href}
+          criteria={{ mode: source === "watchlist" ? "unwatched" : mode, decade, notSeenYears: mode === "rewatch" && source !== "watchlist" ? years : undefined, exclude: excludeTmdb }} />
       ) : !pick ? (
         <div className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-stone-600 dark:border-stone-700 dark:text-stone-400">
           <p>Nothing on the shelf matches{exclude.length ? " that you haven't already passed on" : ""}.</p>

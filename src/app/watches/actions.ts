@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { formatKind, viewingFormats, watches } from "@/db/schema";
 import { enrichFilms, linkTmdbId } from "@/db/film-link";
+import { removeFromWatchlist } from "@/db/watchlist";
 import { findFilmSuggestions, type FilmSuggestion } from "@/db/suggestions";
 import { matchKey } from "@/lib/match-key";
 
@@ -73,8 +74,9 @@ export async function addWatch(_prev: LogWatchState, form: FormData): Promise<Lo
     matchKey: matchKey(title, year),
     tmdbId,
   });
-  // Cast, crew and genres for stats.
+  // Cast, crew and genres for stats; watched, so off the watchlist.
   await enrichFilms([tmdbId]);
+  await removeFromWatchlist([tmdbId ? `tmdb:${tmdbId}` : matchKey(title, year)]);
 
   revalidatePath("/shelf");
   revalidatePath("/watches");

@@ -64,6 +64,20 @@
       "when": 1792156210248,
       "tag": "0008_seen_film_key",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792165974274,
+      "tag": "0009_watchlist",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792250046900,
+      "tag": "0010_assistant_watches_logged_at",
+      "breakpoints": true
     }
   ]
 }

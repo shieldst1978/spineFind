@@ -34,6 +34,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <footer className="mx-auto w-full max-w-5xl space-y-2 px-4 py-6 text-xs text-stone-500">
           <p className="flex flex-wrap gap-x-4">
             <Link href="/stats" className="inline-block py-1 text-sm underline">Stats</Link>
+            <Link href="/watchlist" className="inline-block py-1 text-sm underline">Watchlist</Link>
             <Link href="/seen" className="inline-block py-1 text-sm underline">Seen before?</Link>
             <Link href="/review" className="inline-block py-1 text-sm underline">Review matches</Link>
             <Link href="/settings" className="inline-block py-1 text-sm underline">Settings</Link>
