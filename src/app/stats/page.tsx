@@ -62,6 +62,7 @@ export default async function StatsPage({ searchParams }: PageProps<"/stats">) {
           <div className="grid gap-5 sm:grid-cols-2">
             <Ranked title="Directors" note="films watched" rows={s.directors.map((d) => ({ label: d.name, n: d.films, extra: d.watches > d.films ? `${d.watches} watches` : "" }))} />
             <Ranked title="Actors" note="films watched, top 10 billed" rows={s.actors.map((a) => ({ label: a.name, n: a.films, extra: a.watches > a.films ? `${a.watches} watches` : "" }))} />
+            <Ranked title="Actresses" note="films watched, top 10 billed" rows={s.actresses.map((a) => ({ label: a.name, n: a.films, extra: a.watches > a.films ? `${a.watches} watches` : "" }))} />
             <Ranked title="Genres" note="watches" rows={s.genres.map((g) => ({ label: g.name, n: g.watches, extra: "" }))} />
             <Ranked title="Most rewatched" note="times watched" rows={s.rewatched.map((r) => ({ label: `${r.title}${r.year ? ` (${r.year})` : ""}`, n: r.times, extra: "" }))}
               empty={year ? `Nothing watched twice in ${year}.` : "No rewatches yet."} />
@@ -138,13 +139,17 @@ function Decades({ rows, year }: { rows: WatchStats["decades"]; year?: number })
   const o = rows.reduce((a, r) => a + r.owned, 0);
   const max = Math.max(...rows.map((r) => Math.max(pct(r.watches, w), pct(r.owned, o))), 1);
   const top = [...rows].sort((a, b) => b.watches - a.watches)[0];
+  // The decade your shelf has most of, relative to how much of it you watch.
+  const gap = [...rows].sort((a, b) => (pct(b.owned, o) - pct(b.watches, w)) - (pct(a.owned, o) - pct(a.watches, w)))[0];
   return (
     <section className={`${card} space-y-3`}>
       <div>
-        <h2 className="font-medium">Release decades</h2>
+        <h2 className="font-medium">Release decades: what you watch vs what you own</h2>
         <p className="text-xs text-stone-500">
-          Share of {year ? `${year}'s` : "your"} watches <span className="inline-block size-2 rounded-full bg-sky-500" /> and of the films you own <span className="inline-block size-2 rounded-full bg-stone-400" />.
-          {top && w > 0 && ` Most watched: the ${top.decade}s, ${pct(top.watches, w)}%.`}
+          For each decade, <span className="inline-block size-2 rounded-full bg-sky-500" /> <strong className="font-medium">watched</strong> is the share of {year ? `${year}'s` : "all your"} watches
+          that were films from that decade, and <span className="inline-block size-2 rounded-full bg-stone-400" /> <strong className="font-medium">owned</strong> is the share of the films you own.
+          {top && w > 0 && ` You watch the ${top.decade}s most (${pct(top.watches, w)}%).`}
+          {gap && pct(gap.owned, o) - pct(gap.watches, w) >= 3 && ` Your shelf is heaviest on the ${gap.decade}s compared with your watching: ${pct(gap.owned, o)}% of what you own, ${pct(gap.watches, w)}% of what you watch.`}
         </p>
       </div>
       <ul className="space-y-2">
@@ -152,8 +157,8 @@ function Decades({ rows, year }: { rows: WatchStats["decades"]; year?: number })
           <li key={r.decade} className="grid grid-cols-[2.75rem_1fr] items-center gap-2 text-sm">
             <span className="tabular-nums text-stone-600 dark:text-stone-400">{r.decade}s</span>
             <span className="space-y-0.5">
-              <Bar width={(100 * pct(r.watches, w)) / max} className="bg-sky-500" label={`${pct(r.watches, w)}%`} />
-              <Bar width={(100 * pct(r.owned, o)) / max} className="bg-stone-400" label={`${pct(r.owned, o)}%`} />
+              <Bar width={(100 * pct(r.watches, w)) / max} className="bg-sky-500" label={`watched ${pct(r.watches, w)}%`} />
+              <Bar width={(100 * pct(r.owned, o)) / max} className="bg-stone-400" label={`owned ${pct(r.owned, o)}%`} />
             </span>
           </li>
         ))}

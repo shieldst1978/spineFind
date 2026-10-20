@@ -115,13 +115,14 @@ export type TmdbMovieFull = TmdbMovie & {
   voteAverage: number | null;
   voteCount: number | null;
   /** Top 10 billed cast, then key crew. */
-  credits: { personId: number; name: string; profilePath: string | null; role: "cast" | "crew"; job: string; character: string | null; billing: number | null }[];
+  credits: { personId: number; name: string; profilePath: string | null; gender: number | null; role: "cast" | "crew"; job: string; character: string | null; billing: number | null }[];
   titles: TmdbTitle[];
 };
 
 /** Everything SpineFind stores about a film, in one request. */
 export async function getMovieFull(tmdbId: number): Promise<TmdbMovieFull> {
-  type Person = { id: number; name: string; profile_path: string | null };
+  /** gender: TMDB's code, 0 not set, 1 female, 2 male, 3 non-binary. */
+  type Person = { id: number; name: string; profile_path: string | null; gender?: number };
   const m = await get<{
     id: number; imdb_id: string | null; title: string; original_title: string | null; original_language: string | null;
     release_date: string | null; runtime: number | null; overview: string | null; poster_path: string | null;
@@ -143,10 +144,10 @@ export async function getMovieFull(tmdbId: number): Promise<TmdbMovieFull> {
     .slice()
     .sort((a, b) => a.order - b.order)
     .slice(0, 10)
-    .map((c) => ({ personId: c.id, name: c.name, profilePath: c.profile_path, role: "cast" as const, job: "Actor", character: c.character || null, billing: c.order }));
+    .map((c) => ({ personId: c.id, name: c.name, profilePath: c.profile_path, gender: c.gender || null, role: "cast" as const, job: "Actor", character: c.character || null, billing: c.order }));
   const crew = m.credits.crew
     .filter((c) => KEY_CREW.has(c.job))
-    .map((c) => ({ personId: c.id, name: c.name, profilePath: c.profile_path, role: "crew" as const, job: c.job, character: null, billing: null }));
+    .map((c) => ({ personId: c.id, name: c.name, profilePath: c.profile_path, gender: c.gender || null, role: "crew" as const, job: c.job, character: null, billing: null }));
 
   return {
     tmdbId: m.id,
@@ -263,4 +264,11 @@ export const TMDB_GENRES: Record<string, number> = {
 export async function findByImdbId(imdbId: string): Promise<number | null> {
   const data = await get<{ movie_results?: { id: number }[] }>(`/find/${imdbId}`, { external_source: "imdb_id" });
   return data.movie_results?.[0]?.id ?? null;
+}
+
+/** Everyone credited on a film with TMDB's gender code (0 not set, 1 female, 2 male, 3 non-binary). */
+export async function getCreditGenders(tmdbId: number): Promise<{ personId: number; gender: number }[]> {
+  type P = { id: number; gender?: number };
+  const data = await get<{ cast: P[]; crew: P[] }>(`/movie/${tmdbId}/credits`);
+  return [...data.cast, ...data.crew].filter((p) => p.gender).map((p) => ({ personId: p.id, gender: p.gender! }));
 }

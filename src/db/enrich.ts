@@ -35,8 +35,11 @@ export async function storeFilm(db: Db, m: TmdbMovieFull) {
     if (persons.length) {
       await tx
         .insert(people)
-        .values(persons.map((p) => ({ tmdbPersonId: p.personId, name: p.name, profilePath: p.profilePath })))
-        .onConflictDoUpdate({ target: people.tmdbPersonId, set: { name: sql`excluded.name`, profilePath: sql`excluded.profile_path` } });
+        .values(persons.map((p) => ({ tmdbPersonId: p.personId, name: p.name, profilePath: p.profilePath, gender: p.gender })))
+        .onConflictDoUpdate({
+          target: people.tmdbPersonId,
+          set: { name: sql`excluded.name`, profilePath: sql`excluded.profile_path`, gender: sql`coalesce(excluded.gender, ${people.gender})` },
+        });
     }
 
     // Credits and titles are replaced wholesale so a re-run reflects TMDB as it is now.

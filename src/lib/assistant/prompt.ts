@@ -39,7 +39,7 @@ assistant_watches: one row per viewing.
   format_kind ('disc', 'streaming', 'cinema', 'tv', 'download', 'other'), format_from_memory (bool), nth_watch (1 = first time), tmdb_id.
 
 Other tables, if you need them: products (boxes: title, spine_colours text[], location), items (films in boxes),
-people (tmdb_person_id, name), film_credits (tmdb_id, person_id, role 'cast'|'crew', job e.g. 'Director', 'Screenplay',
+people (tmdb_person_id, name, gender: 1 female, 2 male, 3 non-binary, null if TMDB doesn't say; use it for "actresses"), film_credits (tmdb_id, person_id, role 'cast'|'crew', job e.g. 'Director', 'Screenplay',
 'Original Music Composer', 'Director of Photography', 'Editor', character, billing), film_titles (tmdb_id, title, kind, country:
 other titles a film is known by), streaming_services (provider_id, name, subscribed),
 watchlist (film_key, tmdb_id, title, release_year, added_on: films Tim wants to watch, from his IMDb watchlist; a film leaves

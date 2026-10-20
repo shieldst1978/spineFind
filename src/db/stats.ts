@@ -14,6 +14,8 @@ export type WatchStats = {
   decades: { decade: number; watches: number; owned: number }[];
   directors: { name: string; films: number; watches: number }[];
   actors: { name: string; films: number; watches: number }[];
+  /** Women in the cast (TMDB gender); actors above are everyone else. */
+  actresses: { name: string; films: number; watches: number }[];
   genres: { name: string; watches: number }[];
   rewatched: { title: string; year: number | null; times: number }[];
   shelf: { films: number; watched: number };
@@ -26,7 +28,13 @@ export async function watchStats(year?: number): Promise<WatchStats> {
   const inYear: SQL = year ? sql`extract(year from w.watched_on)::int = ${year}` : sql`true`;
   const run = <T>(q: SQL) => db.execute<T & Record<string, unknown>>(q).then((r) => r.rows as T[]);
 
-  const [totals, perYear, decades, directors, actors, genres, rewatched, shelf] = await Promise.all([
+  const castTop = (women: boolean) => run<WatchStats["actors"][number]>(sql`
+      select p.name, count(distinct w.tmdb_id)::int as films, count(*)::int as watches
+      from watches w join film_credits c on c.tmdb_id = w.tmdb_id and c.role = 'cast' join people p on p.tmdb_person_id = c.person_id
+      where ${inYear} and ${women ? sql`p.gender = 1` : sql`coalesce(p.gender, 0) <> 1`}
+      group by p.tmdb_person_id, p.name order by films desc, watches desc, p.name limit ${TOP}`);
+
+  const [totals, perYear, decades, directors, actors, actresses, genres, rewatched, shelf] = await Promise.all([
     // Rewatch = any watch after a film's first, numbered over the whole log.
     run<WatchStats["totals"]>(sql`
       with numbered as (
@@ -52,10 +60,9 @@ export async function watchStats(year?: number): Promise<WatchStats> {
       select p.name, count(distinct w.tmdb_id)::int as films, count(*)::int as watches
       from watches w join film_credits c on c.tmdb_id = w.tmdb_id and c.job = 'Director' join people p on p.tmdb_person_id = c.person_id
       where ${inYear} group by p.tmdb_person_id, p.name order by films desc, watches desc, p.name limit ${TOP}`),
-    run<WatchStats["actors"][number]>(sql`
-      select p.name, count(distinct w.tmdb_id)::int as films, count(*)::int as watches
-      from watches w join film_credits c on c.tmdb_id = w.tmdb_id and c.role = 'cast' join people p on p.tmdb_person_id = c.person_id
-      where ${inYear} group by p.tmdb_person_id, p.name order by films desc, watches desc, p.name limit ${TOP}`),
+    castTop(false),
+    castTop(true),
+
     run<WatchStats["genres"][number]>(sql`
       select g as name, count(*)::int as watches
       from watches w join films f on f.tmdb_id = w.tmdb_id, unnest(f.genres) g
@@ -69,5 +76,5 @@ export async function watchStats(year?: number): Promise<WatchStats> {
       where i.item_type = 'film' and p.location = 'shelf'`),
   ]);
 
-  return { totals: totals[0], perYear, decades, directors, actors, genres, rewatched, shelf: shelf[0] };
+  return { totals: totals[0], perYear, decades, directors, actors, actresses, genres, rewatched, shelf: shelf[0] };
 }

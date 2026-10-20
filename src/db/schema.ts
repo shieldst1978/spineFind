@@ -150,6 +150,8 @@ export const films = pgTable("films", {
 /** An actor or crew member, stored once and linked to every film they're credited on. */
 export const people = pgTable("people", {
   tmdbPersonId: integer("tmdb_person_id").primaryKey(),
+  /** TMDB's gender code: 1 female, 2 male, 3 non-binary; null when TMDB doesn't say. */
+  gender: integer("gender"),
   name: text("name").notNull(),
   profilePath: text("profile_path"),
 });

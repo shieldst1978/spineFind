@@ -32,7 +32,7 @@ A personal catalogue of the films on my shelves, searchable by spine colour, and
 | **Ask** | `/spinefind/ask` | Chat with an assistant (Claude Sonnet 5.5 on Microsoft Foundry) about your collection and watching: it queries your data read-only, checks UK streaming, searches TMDB and the web. Conversations are saved; a daily cost cap applies. |
 | **Watchlist** | `/spinefind/watchlist` (footer) | Your IMDb watchlist (uploaded in Settings): each film with your copy (shelf/loft, box, spine) or where it's streaming on your services; views for "watch tonight", shelf, services; "Watched it" opens Log a watch pre-filled. Films leave the list once watched or marked seen. |
 | **Seen before?** | `/spinefind/seen` (footer, Stats) | Films you own with no logged watch, best known first, to tick as seen before the log began (2009). Same as "Seen before, no date" on a film page. |
-| **Stats** | `/spinefind/stats` (footer, watch log) | Watches, films, rewatches, disc share; watches per year by format; release decades watched vs owned; top directors, actors, genres; most rewatched. All time or one year. |
+| **Stats** | `/spinefind/stats` (nav, footer, watch log) | Watches, films, rewatches, disc share; watches per year by format; release decades watched vs owned; top directors, actors, actresses, genres; most rewatched. All time or one year. |
 | **Settings** | `/spinefind/settings` (footer link) | Upload your IMDb watchlist CSV (adds new films, drops ones removed on IMDb, skips TV and films already seen). Tick the UK streaming services you subscribe to. Film pages then show "Where to watch in the UK", with your services first. |
 | **Review** | `/spinefind/review` | Films the TMDB matcher wasn't sure about, most-used first: pick the right one (optionally correcting your year to TMDB's), search TMDB yourself, or say "None of these". |
 
@@ -152,7 +152,7 @@ scripts/
   enrich.ts                     Match every film to TMDB and store its full record (see TMDB enrichment)
   start.mjs                     Container entry point: run migrations, then start Next
   ops/                          PowerShell helpers: deploy, enrichment runs, ask, assistant secrets (see ops/README.md)
-drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films, 0006 assistant conversations, 0007 assistant views, 0008 seen_films keyed by film, 0009 watchlist, 0010 assistant_watches.logged_at)
+drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films, 0006 assistant conversations, 0007 assistant views, 0008 seen_films keyed by film, 0009 watchlist, 0010 assistant_watches.logged_at, 0011 people.gender)
 docs/schema.md                  Original data-model design notes (schema.ts is authoritative)
 Dockerfile, .dockerignore       Container image build (personal data and secrets excluded)
 .github/workflows/build.yml     Build and push the image on every push to main
@@ -167,7 +167,7 @@ Dockerfile, .dockerignore       Container image build (personal data and secrets
 | `watches` | One **viewing** | `watched_on`, `format_id`, `format_from_memory` (aNote era), `match_key`, `tmdb_id`, `film_key`, `legacy_row` (null = logged in the app) |
 | `viewing_formats` | Where you watched (Sky, Cinema, Blu Ray…) | `kind` (disc / cinema / streaming / tv / download / other), `aliases` |
 | `films` | A TMDB film's details | `directors`, `genres`, `keywords`, `countries`, `runtime_minutes`, `uk_certificate`, `uk_release_date`, `collection_name`, `vote_average`, `poster_path`, `imdb_id`, `enriched_at` |
-| `people` | An actor or crew member | `name`, `profile_path` |
+| `people` | An actor or crew member | `name`, `profile_path`, `gender` (TMDB: 1 female, 2 male, 3 non-binary) |
 | `film_credits` | Who did what on a film | `role` (cast / crew), `job` (Director, Screenplay, Original Music Composer…), `character`, `billing` (cast order, top 10) |
 | `film_titles` | Every title a film goes by | `kind` (tmdb / original / alternative), `country` (GB, US…) |
 | `streaming_services` | A UK streaming / rental service (TMDB's JustWatch list, refreshed monthly) | `name`, `logo_path`, `priority`, `subscribed` (yours) |
