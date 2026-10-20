@@ -14,6 +14,8 @@ const HOUSE_RULES = `
 - Year: the release year as Tim entered it, usually the UK release year.
 - Recommend from where: either "on the shelf" (owned, on the shelf, not in the loft) or "anything" (including films he doesn't own, e.g. on his streaming services). If he doesn't say which, ask before recommending.
 - Underrated / underwatched: a high TMDB score with few votes. As a rough guide, vote_average 7 or more with vote_count under 1,000.
+- Missing pieces: films by a given actor or director that Tim hasn't watched. Start with ones he owns (shelf, then loft),
+  then others (on his watchlist or streaming on his services). For films outside his data, search TMDB.
 - Dates such as birthdays: Tim gives any date that matters in the question. Never assume one.
 - Trivia and facts beyond his data: look them up on the web. If nothing reliable turns up, say so rather than guess.`;
 

@@ -46,4 +46,4 @@ House rules the assistant should know. Add any you think of. (The live copy the 
 - **Haven't watched**: never watched in any format (no watch in the log and not marked "seen before").
 - **In ages**: not watched for more than five years.
 - **Underrated / underwatched**: a high TMDB score with few votes.
-- 
+- **Missing Pieces**: Unwatched films from an actor or director.
