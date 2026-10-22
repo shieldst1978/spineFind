@@ -2,16 +2,21 @@
  * Imports an IMDb watch-history (or ratings) CSV as "films seen" from the command line. The same import
  * runs from Settings → IMDb in the app; see src/db/imdb.ts for the rules.
  *
- *   DATABASE_URL=… npx tsx --conditions=react-server scripts/import-imdb.ts --cloud [--dry-run] [--production] [file.csv]
+ *   DATABASE_URL=… npx tsx --conditions=react-server scripts/import-imdb.ts --cloud [--dry-run] [--production] [history.csv] [--watchlist=list.csv]
+ *
+ * With --watchlist, the watchlist is synced after the history, exactly as the Settings upload does.
  */
 import { readFileSync } from "node:fs";
 import { createDb } from "../src/db/client";
 import { enrichFilms } from "../src/db/film-link";
 import { importSeenFromImdb } from "../src/db/imdb";
+import { refreshWatchlistAvailability } from "../src/db/streaming";
+import { syncWatchlist } from "../src/db/watchlist";
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((a) => a.startsWith("--")));
 const file = args.find((a) => !a.startsWith("--")) ?? "imdb_exports/imdb_watch_history.csv";
+const watchlistFile = args.find((a) => a.startsWith("--watchlist="))?.slice("--watchlist=".length);
 
 async function main() {
   if (!process.env.TMDB_READ_TOKEN) throw new Error("TMDB_READ_TOKEN is not set");
@@ -30,9 +35,20 @@ async function main() {
   const { newTmdbIds, sample, ...counts } = r;
   console.log("result:", JSON.stringify(counts));
   console.log(dryRun ? "would mark, e.g.:" : "marked, e.g.:", sample.join("; "));
-  if (!dryRun && newTmdbIds.length) {
-    await enrichFilms(newTmdbIds);
-    console.log(`fetched TMDB records for ${newTmdbIds.length} new films`);
+  const toFetch = [...newTmdbIds];
+  if (watchlistFile && !dryRun) {
+    const w = await syncWatchlist(readFileSync(watchlistFile, "utf8"));
+    const { newTmdbIds: wlNew, ...wlCounts } = w;
+    console.log("watchlist:", JSON.stringify(wlCounts));
+    toFetch.push(...wlNew);
+  }
+  if (!dryRun && toFetch.length) {
+    await enrichFilms([...new Set(toFetch)]);
+    console.log(`fetched TMDB records for ${new Set(toFetch).size} new films`);
+  }
+  if (watchlistFile && !dryRun) {
+    await refreshWatchlistAvailability();
+    console.log("watchlist streaming availability checked");
   }
 }
 
