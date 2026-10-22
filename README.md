@@ -33,7 +33,7 @@ A personal catalogue of the films on my shelves, searchable by spine colour, and
 | **Watchlist** | `/spinefind/watchlist` (footer) | Your IMDb watchlist (uploaded in Settings): each film with your copy (shelf/loft, box, spine) or where it's streaming on your services; views for "watch tonight", shelf, services; "Watched it" opens Log a watch pre-filled. Films leave the list once watched or marked seen. |
 | **Seen before?** | `/spinefind/seen` (footer, Stats) | Films you own with no logged watch, best known first, to tick as seen before the log began (2009). Same as "Seen before, no date" on a film page. |
 | **Stats** | `/spinefind/stats` (nav, footer, watch log) | Watches, films, rewatches, disc share; watches per year by format; release decades watched vs owned; top directors, actors, actresses, genres; most rewatched. All time or one year. |
-| **Settings** | `/spinefind/settings` (footer link) | Upload your IMDb watchlist CSV (adds new films, drops ones removed on IMDb, skips TV and films already seen). Tick the UK streaming services you subscribe to. Film pages then show "Where to watch in the UK", with your services first. |
+| **Settings** | `/spinefind/settings` (footer link) | IMDb: upload your watch history and/or watchlist CSVs in one go (history → films seen; watchlist synced: new films added, ones removed on IMDb dropped, TV and seen films skipped). Tick the UK streaming services you subscribe to. Film pages then show "Where to watch in the UK", with your services first. |
 | **Review** | `/spinefind/review` | Films the TMDB matcher wasn't sure about, most-used first: pick the right one (optionally correcting your year to TMDB's), search TMDB yourself, or say "None of these". |
 
 ## How it fits together
@@ -107,7 +107,7 @@ src/
     pick/page.tsx               Pick a film; pick/services-pick.tsx: picking on your streaming services
     review/page.tsx             Review TMDB matches; review/actions.ts: confirmMatch, rejectMatch, markAsTv, reopenMatch
     stats/page.tsx              Stats (queries in db/stats.ts)
-    watchlist/page.tsx          Watchlist; settings/watchlist-actions.ts: uploadWatchlist (sync from an IMDb CSV)
+    watchlist/page.tsx          Watchlist; settings/imdb-actions.ts: uploadImdb (watch history and/or watchlist CSVs)
     seen/page.tsx               Seen before? bulk ticking; seen/actions.ts: markSeenBefore
     ask/page.tsx                The assistant chat; ask/stream/route.ts streams answers (NDJSON); components/ask-chat.tsx
     settings/page.tsx           Your streaming services; settings/actions.ts: saveServices
@@ -129,6 +129,7 @@ src/
     films.ts                    cacheFilm() (full TMDB record), detailsForItem() (confident title+year match only)
     film-link.ts                linkTmdbId(): a saved film inherits its title+year's TMDB link; enrichFilms()
     enrich.ts                   storeFilm(): writes a full TMDB record (film, people, credits, titles)
+    imdb.ts                     importSeenFromImdb: an IMDb watch-history/ratings CSV → films seen
     watchlist.ts                syncWatchlist (IMDb CSV), removeFromWatchlist, listWatchlist, pickFromWatchlist
     assistant.ts                Assistant conversations, daily spend, and the read-only SQL runner
     streaming.ts                UK services list and your subscriptions; availabilityFor() (cached a day)
@@ -270,7 +271,13 @@ Two separate things:
 
 ## IMDb import
 
-`scripts/import-imdb.ts` (runner `scripts/ops/run-import-imdb.ps1`, dev by default, `-Production` for live) reads an IMDb
+**In the app:** Settings → IMDb takes a watch-history (or ratings) CSV and/or a watchlist CSV in one upload. The history
+is imported first (films seen; newly seen films leave the watchlist), then the watchlist is synced. TMDB records and
+streaming availability for new films are fetched in the background. Uploading the same files again is harmless.
+SpineFind doesn't fetch from IMDb itself: IMDb has no API and its conditions of use forbid automated scraping, public
+lists included. The rules live in `src/db/imdb.ts` and `src/db/watchlist.ts`.
+
+**From the command line:** `scripts/import-imdb.ts` (runner `scripts/ops/run-import-imdb.ps1`, dev by default, `-Production` for live) reads an IMDb
 watch-history CSV (`imdb_exports/`, git-ignored), skips TV, matches each film to TMDB by IMDb id, and marks films with no
 logged watch as seen (`source = imdb`). It never marks discs watched, keeps your own titles where SpineFind has the film,
 and fetches full TMDB records for films new to SpineFind. Re-runnable.

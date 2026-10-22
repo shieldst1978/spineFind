@@ -33,7 +33,7 @@ export default async function WatchlistPage({ searchParams }: PageProps<"/watchl
           <Link href="/pick?from=watchlist" className="shrink-0 text-sm text-stone-600 underline dark:text-stone-400">Pick one →</Link>
         </div>
         <p className="text-sm text-stone-600 dark:text-stone-400">
-          From your IMDb watchlist (<Link href="/settings#watchlist" className="underline">upload a new export</Link> to update it).
+          From your IMDb watchlist (<Link href="/settings#imdb" className="underline">upload a new export</Link> to update it).
           Films come off once you log a watch.
         </p>
         <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1" aria-label="Show">
@@ -47,7 +47,7 @@ export default async function WatchlistPage({ searchParams }: PageProps<"/watchl
 
       {all.length === 0 ? (
         <p className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-stone-600 dark:border-stone-700 dark:text-stone-400">
-          Your watchlist is empty. <Link href="/settings#watchlist" className="underline">Upload your IMDb watchlist</Link> to fill it.
+          Your watchlist is empty. <Link href="/settings#imdb" className="underline">Upload your IMDb watchlist</Link> to fill it.
         </p>
       ) : shown.length === 0 ? (
         <p className="text-sm text-stone-600 dark:text-stone-400">Nothing here right now.</p>
