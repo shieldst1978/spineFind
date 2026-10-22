@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { watchStats, type Kind, type WatchStats } from "@/db/stats";
+import { watchStats, type Basis, type Kind, type WatchStats } from "@/db/stats";
 
 export const metadata: Metadata = { title: "Stats · SpineFind" };
 
@@ -17,11 +17,16 @@ const pct = (n: number, d: number) => (d ? Math.round((100 * n) / d) : 0);
 
 export default async function StatsPage({ searchParams }: PageProps<"/stats">) {
   const sp = await searchParams;
-  const yearParam = Array.isArray(sp.year) ? sp.year[0] : sp.year;
-  const year = yearParam && /^\d{4}$/.test(yearParam) ? Number(yearParam) : undefined;
-  const s = await watchStats(year);
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
+  const basis: Basis = one(sp.count) === "seen" ? "seen" : "log";
+  const seen = basis === "seen";
+  // Films seen outside the log have no dates, so "every film I've seen" is always all time.
+  const year = !seen && /^\d{4}$/.test(one(sp.year)) ? Number(one(sp.year)) : undefined;
+  const s = await watchStats(year, basis);
   const years = [...new Set(s.perYear.map((r) => r.year))].sort((a, b) => b - a);
   const t = s.totals;
+  const films = seen ? "films seen" : "films watched";
+  const extra = (r: { films: number; watches: number }) => (r.watches > r.films ? `${r.watches} logged watches` : "");
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-3xl flex-1 space-y-5 px-4 py-6">
@@ -30,54 +35,85 @@ export default async function StatsPage({ searchParams }: PageProps<"/stats">) {
           <h1 className="text-2xl font-semibold tracking-tight">Stats{year && <span className="font-normal text-stone-500"> · {year}</span>}</h1>
           <Link href="/watches" className="shrink-0 text-sm text-stone-600 underline dark:text-stone-400">Watch log →</Link>
         </div>
-        {/* Scrolls sideways on its own; the page never does. */}
-        <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1" aria-label="Year">
-          <YearChip label="All time" href="/stats" active={!year} />
-          {years.map((y) => <YearChip key={y} label={String(y)} href={`/stats?year=${y}`} active={year === y} />)}
-        </nav>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-stone-600 dark:text-stone-400">Count:</span>
+          <span className="inline-flex rounded-lg border border-stone-300 p-0.5 dark:border-stone-700" role="group" aria-label="Count">
+            <Link href={year ? `/stats?year=${year}` : "/stats"} aria-current={!seen ? "page" : undefined}
+              className={`rounded-md px-2.5 py-1 ${!seen ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900" : "text-stone-600 dark:text-stone-400"}`}>
+              Logged watches
+            </Link>
+            <Link href="/stats?count=seen" aria-current={seen ? "page" : undefined}
+              className={`rounded-md px-2.5 py-1 ${seen ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900" : "text-stone-600 dark:text-stone-400"}`}>
+              Every film I&apos;ve seen
+            </Link>
+          </span>
+        </div>
+        {seen ? (
+          <p className="text-xs text-stone-500">
+            Each film counted once, whether it&apos;s in your log, your IMDb history or marked seen: {t.seenFilms.toLocaleString("en-GB")} films,
+            {" "}{t.seenNeverLogged.toLocaleString("en-GB")} of them never logged. Those have no dates, so this is all time; watches per year and rewatches
+            still come from your log.
+          </p>
+        ) : (
+          /* Scrolls sideways on its own; the page never does. */
+          <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1" aria-label="Year">
+            <YearChip label="All time" href="/stats" active={!year} />
+            {years.map((y) => <YearChip key={y} label={String(y)} href={`/stats?year=${y}`} active={year === y} />)}
+          </nav>
+        )}
       </header>
 
-      {t.watches === 0 ? (
+      {t.watches === 0 && !seen ? (
         <p className={card}>No watches logged {year ? `in ${year}` : "yet"}.</p>
       ) : (
         <>
           <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Figure value={t.watches} label="watches" />
-            <Figure value={t.films} label="different films" />
-            <Figure value={`${pct(t.rewatches, t.watches)}%`} label={`rewatches (${t.rewatches.toLocaleString("en-GB")})`} />
-            <Figure value={`${pct(t.disc, t.watches)}%`} label="on disc" />
-            <Figure value={t.medianAge ?? "–"} label="median years old when watched" />
-            <Figure value={t.avgReleaseYear ? String(t.avgReleaseYear) : "–"} label="average release year" />
-            {!year && (
-              <Link href="/seen?where=shelf" className="contents">
-                <Figure value={`${pct(s.shelf.watched, s.shelf.films)}%`} label={`of the shelf watched (${(s.shelf.films - s.shelf.watched).toLocaleString("en-GB")} to go; seen some before 2009?)`} />
-              </Link>
+            {seen ? (
+              <>
+                <Figure value={t.seenFilms} label="films seen" />
+                <Figure value={t.seenNeverLogged} label="seen but never logged" />
+                <Figure value={t.films} label="films in your log" />
+                <Figure value={t.watches} label="logged watches" />
+              </>
+            ) : (
+              <>
+                <Figure value={t.watches} label="watches" />
+                <Figure value={t.films} label="different films" />
+                <Figure value={`${pct(t.rewatches, t.watches)}%`} label={`rewatches (${t.rewatches.toLocaleString("en-GB")})`} />
+                <Figure value={`${pct(t.disc, t.watches)}%`} label="on disc" />
+                <Figure value={t.medianAge ?? "–"} label="median years old when watched" />
+                <Figure value={t.avgReleaseYear ? String(t.avgReleaseYear) : "–"} label="average release year" />
+                {!year && (
+                  <Link href="/seen?where=shelf" className="contents">
+                    <Figure value={`${pct(s.shelf.watched, s.shelf.films)}%`} label={`of the shelf watched (${(s.shelf.films - s.shelf.watched).toLocaleString("en-GB")} to go; seen some before 2009?)`} />
+                  </Link>
+                )}
+                {!year && t.first && <Figure value={t.first.slice(0, 4)} label="first logged watch" />}
+              </>
             )}
-            {!year && t.first && <Figure value={t.first.slice(0, 4)} label="first logged watch" />}
           </section>
 
           <PerYear rows={s.perYear} selected={year} />
-          <Decades rows={s.decades} year={year} />
+          <Decades rows={s.decades} year={year} seen={seen} />
 
           <div className="grid gap-5 sm:grid-cols-2">
-            <Ranked title="Directors" note="films watched" rows={s.directors.map((d) => ({ label: d.name, n: d.films, extra: d.watches > d.films ? `${d.watches} watches` : "" }))} />
-            <Ranked title="Actors" note="films watched, top 10 billed" rows={s.actors.map((a) => ({ label: a.name, n: a.films, extra: a.watches > a.films ? `${a.watches} watches` : "" }))} />
-            <Ranked title="Actresses" note="films watched, top 10 billed" rows={s.actresses.map((a) => ({ label: a.name, n: a.films, extra: a.watches > a.films ? `${a.watches} watches` : "" }))} />
-            <Ranked title="Genres" note="watches" rows={s.genres.map((g) => ({ label: g.name, n: g.watches, extra: "" }))} />
-            <Ranked title="Most rewatched" note="times watched" rows={s.rewatched.map((r) => ({ label: `${r.title}${r.year ? ` (${r.year})` : ""}`, n: r.times, extra: "" }))}
+            <Ranked title="Directors" note={films} rows={s.directors.map((d) => ({ label: d.name, n: d.films, extra: extra(d) }))} />
+            <Ranked title="Actors" note={`${films}, top 10 billed`} rows={s.actors.map((a) => ({ label: a.name, n: a.films, extra: extra(a) }))} />
+            <Ranked title="Actresses" note={`${films}, top 10 billed`} rows={s.actresses.map((a) => ({ label: a.name, n: a.films, extra: extra(a) }))} />
+            <Ranked title="Genres" note={seen ? "films seen" : "watches"} rows={s.genres.map((g) => ({ label: g.name, n: g.watches, extra: "" }))} />
+            <Ranked title="Most rewatched" note="times watched, from your log" rows={s.rewatched.map((r) => ({ label: `${r.title}${r.year ? ` (${r.year})` : ""}`, n: r.times, extra: "" }))}
               empty={year ? `Nothing watched twice in ${year}.` : "No rewatches yet."} />
           </div>
 
           <p className="text-xs text-stone-500">
             Films are counted once however you spelled them, once they&apos;re linked to TMDB. Directors, actors and genres come from TMDB, so unlinked films aren&apos;t in those lists.
-            {t.fromMemory > 0 && ` ${t.fromMemory.toLocaleString("en-GB")} of these watches are from the aNote years, with the format filled in from memory.`}
+            {!seen && t.fromMemory > 0 && ` ${t.fromMemory.toLocaleString("en-GB")} of these watches are from the aNote years, with the format filled in from memory.`}
           </p>
         </>
       )}
     </main>
   );
 }
-
 function YearChip({ label, href, active }: { label: string; href: string; active: boolean }) {
   return (
     <Link href={href} aria-current={active ? "page" : undefined}
@@ -134,7 +170,8 @@ function PerYear({ rows, selected }: { rows: WatchStats["perYear"]; selected?: n
 }
 
 /** Release decades: what you watch next to what's on your shelf (and in the loft). */
-function Decades({ rows, year }: { rows: WatchStats["decades"]; year?: number }) {
+function Decades({ rows, year, seen }: { rows: WatchStats["decades"]; year?: number; seen: boolean }) {
+  const verb = seen ? "seen" : "watched";
   const w = rows.reduce((a, r) => a + r.watches, 0);
   const o = rows.reduce((a, r) => a + r.owned, 0);
   const max = Math.max(...rows.map((r) => Math.max(pct(r.watches, w), pct(r.owned, o))), 1);
@@ -144,12 +181,12 @@ function Decades({ rows, year }: { rows: WatchStats["decades"]; year?: number })
   return (
     <section className={`${card} space-y-3`}>
       <div>
-        <h2 className="font-medium">Release decades: what you watch vs what you own</h2>
+        <h2 className="font-medium">Release decades: what you {seen ? "have seen" : "watch"} vs what you own</h2>
         <p className="text-xs text-stone-500">
-          For each decade, <span className="inline-block size-2 rounded-full bg-sky-500" /> <strong className="font-medium">watched</strong> is the share of {year ? `${year}'s` : "all your"} watches
-          that were films from that decade, and <span className="inline-block size-2 rounded-full bg-stone-400" /> <strong className="font-medium">owned</strong> is the share of the films you own.
-          {top && w > 0 && ` You watch the ${top.decade}s most (${pct(top.watches, w)}%).`}
-          {gap && pct(gap.owned, o) - pct(gap.watches, w) >= 3 && ` Your shelf is heaviest on the ${gap.decade}s compared with your watching: ${pct(gap.owned, o)}% of what you own, ${pct(gap.watches, w)}% of what you watch.`}
+          For each decade, <span className="inline-block size-2 rounded-full bg-sky-500" /> <strong className="font-medium">{verb}</strong> is the share of {seen ? "every film you've seen" : year ? `${year}'s watches` : "all your watches"}
+          {seen ? " from that decade, " : " that were films from that decade, "}and <span className="inline-block size-2 rounded-full bg-stone-400" /> <strong className="font-medium">owned</strong> is the share of the films you own.
+          {top && w > 0 && ` You ${seen ? "have seen" : "watch"} the ${top.decade}s most (${pct(top.watches, w)}%).`}
+          {gap && pct(gap.owned, o) - pct(gap.watches, w) >= 3 && ` Your shelf is heaviest on the ${gap.decade}s compared with your ${seen ? "viewing" : "watching"}: ${pct(gap.owned, o)}% of what you own, ${pct(gap.watches, w)}% of what you've ${verb}.`}
         </p>
       </div>
       <ul className="space-y-2">
@@ -157,7 +194,7 @@ function Decades({ rows, year }: { rows: WatchStats["decades"]; year?: number })
           <li key={r.decade} className="grid grid-cols-[2.75rem_1fr] items-center gap-2 text-sm">
             <span className="tabular-nums text-stone-600 dark:text-stone-400">{r.decade}s</span>
             <span className="space-y-0.5">
-              <Bar width={(100 * pct(r.watches, w)) / max} className="bg-sky-500" label={`watched ${pct(r.watches, w)}%`} />
+              <Bar width={(100 * pct(r.watches, w)) / max} className="bg-sky-500" label={`${verb} ${pct(r.watches, w)}%`} />
               <Bar width={(100 * pct(r.owned, o)) / max} className="bg-stone-400" label={`owned ${pct(r.owned, o)}%`} />
             </span>
           </li>

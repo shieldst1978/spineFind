@@ -8,6 +8,8 @@ export type WatchStats = {
   totals: {
     watches: number; films: number; rewatches: number; disc: number; first: string | null; last: string | null;
     medianAge: number | null; avgReleaseYear: number | null; fromMemory: number;
+    /** Every film seen in any way (logged, IMDb, marked seen), and how many of those were never logged. */
+    seenFilms: number; seenNeverLogged: number;
   };
   /** Every year in the log (not just the selected one), split by kind of format. */
   perYear: { year: number; kind: Kind; n: number }[];
@@ -23,16 +25,31 @@ export type WatchStats = {
 
 const TOP = 10;
 
-/** Everything on the Stats page, for the whole log or one year of it. Films are counted by film_key. */
-export async function watchStats(year?: number): Promise<WatchStats> {
-  const inYear: SQL = year ? sql`extract(year from w.watched_on)::int = ${year}` : sql`true`;
-  const run = <T>(q: SQL) => db.execute<T & Record<string, unknown>>(q).then((r) => r.rows as T[]);
+/** What Stats counts: logged watches (with dates), or every film seen in any way (no dates, so all time). */
+export type Basis = "log" | "seen";
 
-  const castTop = (women: boolean) => run<WatchStats["actors"][number]>(sql`
-      select p.name, count(distinct w.tmdb_id)::int as films, count(*)::int as watches
-      from watches w join film_credits c on c.tmdb_id = w.tmdb_id and c.role = 'cast' join people p on p.tmdb_person_id = c.person_id
-      where ${inYear} and ${women ? sql`p.gender = 1` : sql`coalesce(p.gender, 0) <> 1`}
-      group by p.tmdb_person_id, p.name order by films desc, watches desc, p.name limit ${TOP}`);
+/**
+ * Everything on the Stats page. "log": the whole log or one year of it. "seen": every film seen once
+ * (logged, IMDb history, marked seen) for decades, people and genres; per-year, rewatch and format
+ * figures stay on the log. Films are counted by film_key.
+ */
+export async function watchStats(year?: number, basis: Basis = "log"): Promise<WatchStats> {
+  const seen = basis === "seen";
+  const inYear: SQL = year && !seen ? sql`extract(year from w.watched_on)::int = ${year}` : sql`true`;
+  const run = <T>(q: SQL) => db.execute<T & Record<string, unknown>>(q).then((r) => r.rows as T[]);
+  // Every film seen, once each, with how many logged watches it has.
+  const seenFilms = sql`(select film_key, tmdb_id, release_year, genres, times_watched from assistant_films where watched)`;
+
+  const people = (who: SQL) => seen
+    ? run<WatchStats["actors"][number]>(sql`
+        select p.name, count(distinct s.film_key)::int as films, coalesce(sum(s.times_watched), 0)::int as watches
+        from ${seenFilms} s join film_credits c on c.tmdb_id = s.tmdb_id join people p on p.tmdb_person_id = c.person_id
+        where ${who} group by p.tmdb_person_id, p.name order by films desc, watches desc, p.name limit ${TOP}`)
+    : run<WatchStats["actors"][number]>(sql`
+        select p.name, count(distinct w.tmdb_id)::int as films, count(*)::int as watches
+        from watches w join film_credits c on c.tmdb_id = w.tmdb_id join people p on p.tmdb_person_id = c.person_id
+        where ${inYear} and ${who} group by p.tmdb_person_id, p.name order by films desc, watches desc, p.name limit ${TOP}`);
+  const castTop = (women: boolean) => people(sql`c.role = 'cast' and ${women ? sql`p.gender = 1` : sql`coalesce(p.gender, 0) <> 1`}`);
 
   const [totals, perYear, decades, directors, actors, actresses, genres, rewatched, shelf] = await Promise.all([
     // Rewatch = any watch after a film's first, numbered over the whole log.
@@ -45,28 +62,31 @@ export async function watchStats(year?: number): Promise<WatchStats> {
         min(w.watched_on)::text as first, max(w.watched_on)::text as last,
         percentile_cont(0.5) within group (order by extract(year from w.watched_on) - w.release_year)::int as "medianAge",
         round(avg(w.release_year))::int as "avgReleaseYear",
-        count(*) filter (where w.format_from_memory)::int as "fromMemory"
+        count(*) filter (where w.format_from_memory)::int as "fromMemory",
+        (select count(*) from assistant_films where watched)::int as "seenFilms",
+        (select count(*) from assistant_films where seen_before_no_date)::int as "seenNeverLogged"
       from numbered w where ${inYear}`),
     run<WatchStats["perYear"][number]>(sql`
       select extract(year from w.watched_on)::int as year, f.kind::text as kind, count(*)::int as n
       from watches w join viewing_formats f on f.id = w.format_id group by 1, 2 order by 1 desc`),
     run<WatchStats["decades"][number]>(sql`
-      with wd as (select w.release_year / 10 * 10 as decade, count(*)::int as n from watches w where w.release_year is not null and ${inYear} group by 1),
+      with wd as (${seen
+        ? sql`select s.release_year / 10 * 10 as decade, count(*)::int as n from ${seenFilms} s where s.release_year is not null group by 1`
+        : sql`select w.release_year / 10 * 10 as decade, count(*)::int as n from watches w where w.release_year is not null and ${inYear} group by 1`}),
            od as (select i.release_year / 10 * 10 as decade, count(*)::int as n from items i join products p on p.id = i.product_id
                   where i.item_type = 'film' and p.location <> 'gone' and i.release_year is not null group by 1)
       select coalesce(wd.decade, od.decade) as decade, coalesce(wd.n, 0) as watches, coalesce(od.n, 0) as owned
       from wd full join od on od.decade = wd.decade order by 1`),
-    run<WatchStats["directors"][number]>(sql`
-      select p.name, count(distinct w.tmdb_id)::int as films, count(*)::int as watches
-      from watches w join film_credits c on c.tmdb_id = w.tmdb_id and c.job = 'Director' join people p on p.tmdb_person_id = c.person_id
-      where ${inYear} group by p.tmdb_person_id, p.name order by films desc, watches desc, p.name limit ${TOP}`),
+    people(sql`c.job = 'Director'`),
     castTop(false),
     castTop(true),
 
-    run<WatchStats["genres"][number]>(sql`
-      select g as name, count(*)::int as watches
-      from watches w join films f on f.tmdb_id = w.tmdb_id, unnest(f.genres) g
-      where ${inYear} group by g order by watches desc limit 12`),
+    // Genres: watches in the log, or films seen (each film once).
+    run<WatchStats["genres"][number]>(seen
+      ? sql`select g as name, count(*)::int as watches from ${seenFilms} s, unnest(s.genres) g group by g order by watches desc limit 12`
+      : sql`select g as name, count(*)::int as watches
+          from watches w join films f on f.tmdb_id = w.tmdb_id, unnest(f.genres) g
+          where ${inYear} group by g order by watches desc limit 12`),
     run<WatchStats["rewatched"][number]>(sql`
       select (array_agg(w.title order by w.watched_on desc))[1] as title, max(w.release_year) as year, count(*)::int as times
       from watches w where ${inYear} group by w.film_key having count(*) > 1 order by times desc, max(w.watched_on) desc limit ${TOP}`),
