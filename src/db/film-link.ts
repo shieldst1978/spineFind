@@ -9,7 +9,9 @@ import { tmdbEnabled } from "@/lib/tmdb";
  * The TMDB film for a box entry or watch being saved. A film picked from the
  * suggestions brings its own ID (and settles that title + year for next time);
  * otherwise it inherits the link of the same title + year already in the app,
- * so a re-typed film still counts as the same film.
+ * so a re-typed film still counts as the same film. Failing that, a film on the
+ * watchlist with that title + year lends its link (so logging it, even typed
+ * without picking a suggestion, takes it off the watchlist).
  */
 export async function linkTmdbId(title: string, year: number | null, picked: number | null): Promise<number | null> {
   const key = matchKey(title, year);
@@ -23,7 +25,13 @@ export async function linkTmdbId(title: string, year: number | null, picked: num
       union all select tmdb_id, 1 from items where match_key = ${key}
       union all select tmdb_id, 1 from watches where match_key = ${key}
     ) k where tmdb_id is not null order by pref limit 1`);
-  return r.rows[0]?.tmdb_id ?? null;
+  if (r.rows[0]) return r.rows[0].tmdb_id;
+  // The watchlist has no match_key column: compare with the same normalisation. A typed year is needed
+  // (a title alone could be a remake).
+  if (year === null) return null;
+  const listed = await db.execute<{ tmdb_id: number; title: string; release_year: number | null }>(sql`
+    select tmdb_id, title, release_year from watchlist where release_year between ${year - 1} and ${year + 1}`);
+  return listed.rows.find((w) => matchKey(w.title, w.release_year) === key)?.tmdb_id ?? null;
 }
 
 /** A pick in the app answers any open review for that title + year and links its other unlinked entries. */

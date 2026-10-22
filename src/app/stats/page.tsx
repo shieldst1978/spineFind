@@ -100,7 +100,7 @@ export default async function StatsPage({ searchParams }: PageProps<"/stats">) {
             <Ranked title="Directors" note={films} rows={s.directors.map((d) => ({ label: d.name, n: d.films, extra: extra(d) }))} />
             <Ranked title="Actors" note={`${films}, top 10 billed`} rows={s.actors.map((a) => ({ label: a.name, n: a.films, extra: extra(a) }))} />
             <Ranked title="Actresses" note={`${films}, top 10 billed`} rows={s.actresses.map((a) => ({ label: a.name, n: a.films, extra: extra(a) }))} />
-            <Ranked title="Genres" note={seen ? "films seen" : "watches"} rows={s.genres.map((g) => ({ label: g.name, n: g.watches, extra: "" }))} />
+            <Ranked title="Genres" note={films} rows={s.genres.map((g) => ({ label: g.name, n: g.films, extra: extra(g) }))} />
             <Ranked title="Most rewatched" note="times watched, from your log" rows={s.rewatched.map((r) => ({ label: `${r.title}${r.year ? ` (${r.year})` : ""}`, n: r.times, extra: "" }))}
               empty={year ? `Nothing watched twice in ${year}.` : "No rewatches yet."} />
           </div>

@@ -18,7 +18,8 @@ export type WatchStats = {
   actors: { name: string; films: number; watches: number }[];
   /** Women in the cast (TMDB gender); actors above are everyone else. */
   actresses: { name: string; films: number; watches: number }[];
-  genres: { name: string; watches: number }[];
+  /** Films in each genre (each film once), with their logged watches. */
+  genres: { name: string; films: number; watches: number }[];
   rewatched: { title: string; year: number | null; times: number }[];
   shelf: { films: number; watched: number };
 };
@@ -81,12 +82,13 @@ export async function watchStats(year?: number, basis: Basis = "log"): Promise<W
     castTop(false),
     castTop(true),
 
-    // Genres: watches in the log, or films seen (each film once).
+    // Genres: films (each once) and their logged watches; films in the log, or every film seen.
     run<WatchStats["genres"][number]>(seen
-      ? sql`select g as name, count(*)::int as watches from ${seenFilms} s, unnest(s.genres) g group by g order by watches desc limit 12`
-      : sql`select g as name, count(*)::int as watches
+      ? sql`select g as name, count(*)::int as films, coalesce(sum(s.times_watched), 0)::int as watches
+          from ${seenFilms} s, unnest(s.genres) g group by g order by films desc limit 12`
+      : sql`select g as name, count(distinct w.film_key)::int as films, count(*)::int as watches
           from watches w join films f on f.tmdb_id = w.tmdb_id, unnest(f.genres) g
-          where ${inYear} group by g order by watches desc limit 12`),
+          where ${inYear} group by g order by films desc limit 12`),
     run<WatchStats["rewatched"][number]>(sql`
       select (array_agg(w.title order by w.watched_on desc))[1] as title, max(w.release_year) as year, count(*)::int as times
       from watches w where ${inYear} group by w.film_key having count(*) > 1 order by times desc, max(w.watched_on) desc limit ${TOP}`),
