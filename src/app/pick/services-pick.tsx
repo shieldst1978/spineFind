@@ -2,27 +2,34 @@ import Image from "next/image";
 import Link from "next/link";
 import { after } from "next/server";
 import { pickOnServices, refreshLogAvailability, refreshWatchlistAvailability, type ServiceCriteria, type ServicePick } from "@/db/streaming";
-import { pickFromWatchlist } from "@/db/watchlist";
+import { pickFromWatchlist, watchlistSize, type WatchlistWhere } from "@/db/watchlist";
 import { seenItBefore } from "./actions";
 
 /** Pick on your streaming services or from your watchlist: the result card, the runners-up and "Seen it before". */
-export async function ServicesPick({ criteria, href, source = "services", tonightOnly = false }: {
-  criteria: ServiceCriteria; href: (patch: Record<string, string | undefined>) => string; source?: "services" | "watchlist"; tonightOnly?: boolean;
+export async function ServicesPick({ criteria, href, source = "services", watchlistWhere = "either" }: {
+  criteria: ServiceCriteria; href: (patch: Record<string, string | undefined>) => string; source?: "services" | "watchlist";
+  /** Watchlist films on your shelf, on your services, or either. */
+  watchlistWhere?: WatchlistWhere;
 }) {
   const fromWatchlist = source === "watchlist";
   // Rewatches and the watchlist use a daily availability check; top it up after this response.
   if (fromWatchlist) after(refreshWatchlistAvailability);
   else if (criteria.mode === "rewatch") after(refreshLogAvailability);
   const { total, picks, checking } = fromWatchlist
-    ? await pickFromWatchlist({ decade: criteria.decade, exclude: criteria.exclude, availableOnly: tonightOnly })
+    ? await pickFromWatchlist({ decade: criteria.decade, exclude: criteria.exclude, where: watchlistWhere })
     : await pickOnServices(criteria);
   const [pick, ...runnersUp] = picks;
 
   if (!pick) {
     return (
       <div className="rounded-lg border border-dashed border-stone-300 p-6 text-center text-stone-600 dark:border-stone-700 dark:text-stone-400">
-        {fromWatchlist && total === 0 && !criteria.exclude?.length ? (
-          <p>Nothing on your watchlist matches{tonightOnly ? " that you can watch tonight" : ""}. <Link href="/watchlist" className="underline">See your watchlist</Link></p>
+        {fromWatchlist && (await watchlistSize()) === 0 ? (
+          <p>Your watchlist is empty. <Link href="/settings#imdb" className="underline">Upload your IMDb watchlist</Link> in Settings to fill it.</p>
+        ) : fromWatchlist && total === 0 && !criteria.exclude?.length ? (
+          <p>
+            Nothing on your watchlist is {watchlistWhere === "shelf" ? "on your shelf" : watchlistWhere === "services" ? "streaming on your services" : "on your shelf or your services"} right now
+            {criteria.decade !== undefined ? ` from the ${criteria.decade}s` : ""}. <Link href="/watchlist" className="underline">See your watchlist</Link>
+          </p>
         ) : total === 0 && !checking && !criteria.exclude?.length ? (
           <p>Nothing on your services matches. <Link href="/settings" className="underline">Check which services are ticked</Link>, or loosen a criterion.</p>
         ) : checking ? (
@@ -90,7 +97,7 @@ export async function ServicesPick({ criteria, href, source = "services", tonigh
       )}
       <p className="text-center text-xs text-stone-500">
         {fromWatchlist
-          ? `1 of ${total.toLocaleString("en-GB")} on your watchlist${tonightOnly ? " you can watch tonight" : ""}`
+          ? `1 of ${total.toLocaleString("en-GB")} watchlist films ${watchlistWhere === "shelf" ? "on your shelf" : watchlistWhere === "services" ? "on your services" : "you can watch tonight"}`
           : criteria.mode === "rewatch"
           ? `1 of ${total.toLocaleString("en-GB")} past watches on your services`
           : `From ${total.toLocaleString("en-GB")} films on your services, best known first`}

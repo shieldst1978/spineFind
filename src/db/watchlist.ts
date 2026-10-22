@@ -114,11 +114,20 @@ export async function listWatchlist(): Promise<WatchlistEntry[]> {
  * Random films from the watchlist for Pick: optionally only ones you can watch tonight (on your shelf
  * or streaming on your services), and from a decade. Shaped like a streaming pick so it shares the card.
  */
-export async function pickFromWatchlist(c: { decade?: number; exclude?: number[]; availableOnly?: boolean }, count = 4) {
+export type WatchlistWhere = "shelf" | "services" | "either";
+
+export async function watchlistSize(): Promise<number> {
+  return (await db.execute<{ n: number }>(sql`select count(*)::int as n from watchlist`)).rows[0]?.n ?? 0;
+}
+
+export async function pickFromWatchlist(c: { decade?: number; exclude?: number[]; where?: WatchlistWhere }, count = 4) {
   const all = await listWatchlist();
   const exclude = new Set(c.exclude ?? []);
   let pool = all.filter((e) => !exclude.has(e.tmdbId) && (c.decade === undefined || (e.year !== null && Math.floor(e.year / 10) * 10 === c.decade)));
-  if (c.availableOnly) pool = pool.filter((e) => (e.owned && e.owned.where === "shelf") || (e.services?.length ?? 0) > 0);
+  const onShelf = (e: WatchlistEntry) => e.owned?.where === "shelf";
+  const streaming = (e: WatchlistEntry) => (e.services?.length ?? 0) > 0;
+  const where = c.where ?? "either";
+  pool = pool.filter((e) => (where === "shelf" ? onShelf(e) : where === "services" ? streaming(e) && !onShelf(e) : onShelf(e) || streaming(e)));
   const total = pool.length;
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   const picks = await Promise.all(pool.slice(0, count).map(async (e): Promise<ServicePick & { rentable: boolean }> => {

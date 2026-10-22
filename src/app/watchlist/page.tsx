@@ -30,7 +30,7 @@ export default async function WatchlistPage({ searchParams }: PageProps<"/watchl
       <header className="space-y-2">
         <div className="flex items-baseline justify-between gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">Watchlist</h1>
-          <Link href="/pick?from=watchlist" className="shrink-0 text-sm text-stone-600 underline dark:text-stone-400">Pick one →</Link>
+          <Link href="/pick?mode=watchlist" className="shrink-0 text-sm text-stone-600 underline dark:text-stone-400">Pick one →</Link>
         </div>
         <p className="text-sm text-stone-600 dark:text-stone-400">
           From your IMDb watchlist (<Link href="/settings#imdb" className="underline">upload a new export</Link> to update it).
