@@ -6,6 +6,7 @@ import { Spine } from "@/components/spine";
 import { detailsForItem } from "@/db/films";
 import { pickDecades, pickFilms, randomDecade, type MediaFormat, type PickCriteria } from "@/db/queries";
 import { COLOUR_NAMES } from "@/lib/colours";
+import { markFilmSeen } from "../item/[id]/actions";
 import { ServicesPick } from "./services-pick";
 
 export const metadata: Metadata = { title: "Pick a film · SpineFind" };
@@ -182,6 +183,13 @@ export default async function PickPage({ searchParams }: PageProps<"/pick">) {
               Another ↻
             </Link>
           </div>
+          {mode === "unwatched" && (
+            <form action={markFilmSeen.bind(null, pick.id, another)} className="text-center">
+              <button type="submit" className="rounded-lg px-3 py-2 text-sm text-stone-600 underline hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800">
+                Seen it before, show me another
+              </button>
+            </form>
+          )}
           <p className="text-center text-xs text-stone-500">
             1 of {total.toLocaleString("en-GB")} {total === 1 ? "match" : "matches"}
             {exclude.length > 0 && <> · <Link href={href({ not: undefined })} className="underline">reset</Link></>}

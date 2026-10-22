@@ -8,13 +8,15 @@ import { DISC_TO_MEDIA } from "@/db/seed-formats";
 import { availabilityFor, type FilmAvailability } from "@/db/streaming";
 import { normaliseTitle } from "@/lib/match-key";
 import type { Offer } from "@/lib/tmdb";
-import { logWatch, setSeenBefore, unmarkFilmSeen } from "./actions";
+import { logWatch, markFilmSeen, setSeenBefore, unmarkFilmSeen } from "./actions";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base dark:border-stone-700 dark:bg-stone-900";
 /** Where a "seen the film" mark came from. */
-const SEEN_SOURCE: Record<string, string> = { imdb: "from your IMDb history", "seen-page": "ticked on Seen before?", pick: "marked in Pick" };
+const SEEN_SOURCE: Record<string, string> = {
+  imdb: "from your IMDb history", "seen-page": "ticked on Seen before?", pick: "marked in Pick", "film-page": "marked here",
+};
 
 const ERRORS: Record<string, string> = {
   date: "That date doesn't look right. It can't be in the future.",
@@ -132,12 +134,24 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
             <p className="text-xs text-stone-500">Only disc formats (Blu Ray, 4K Blu Ray, DVD, HD DVD) mark this copy as watched. Other formats still go in your watch log.</p>
           </form>
 
-          {discWatches.length === 0 && (
-            <form action={setSeenBefore.bind(null, item.id, !item.watchedBeforeLogging)}>
-              <button type="submit" className="w-full rounded-lg border border-stone-300 px-4 py-2 text-sm dark:border-stone-700">
-                {item.watchedBeforeLogging ? "Undo “seen before, no date”" : "Seen before, no date to log"}
-              </button>
-            </form>
+          {(discWatches.length === 0 || (history.length === 0 && !item.filmSeenMark)) && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {/* The film seen some other way (cinema, TV, years ago): counts for Pick, Stats and Ask; this disc stays unwatched. */}
+              {history.length === 0 && !item.filmSeenMark && !item.watchedBeforeLogging && (
+                <form action={markFilmSeen.bind(null, item.id, "")}>
+                  <button type="submit" className="w-full rounded-lg border border-stone-300 px-4 py-2 text-sm dark:border-stone-700">
+                    I&apos;ve seen the film (not this disc)
+                  </button>
+                </form>
+              )}
+              {discWatches.length === 0 && (
+                <form action={setSeenBefore.bind(null, item.id, !item.watchedBeforeLogging)}>
+                  <button type="submit" className="w-full rounded-lg border border-stone-300 px-4 py-2 text-sm dark:border-stone-700">
+                    {item.watchedBeforeLogging ? "Undo “watched this disc before”" : "Watched this disc before (no date)"}
+                  </button>
+                </form>
+              )}
+            </div>
           )}
         </section>
       )}

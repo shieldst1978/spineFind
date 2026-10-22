@@ -60,3 +60,17 @@ export async function unmarkFilmSeen(itemId: string) {
   revalidatePath("/", "layout");
   back(itemId);
 }
+
+/** "I've seen the film": marks the film seen (not this disc), and takes it off the watchlist. `next` (from Pick) shows another pick; "" returns to the film page. */
+export async function markFilmSeen(itemId: string, next: string) {
+  const [item] = await db.select({ filmKey: items.filmKey, tmdbId: items.tmdbId, title: items.title, year: items.releaseYear }).from(items).where(eq(items.id, itemId));
+  if (item?.filmKey) {
+    await db.insert(seenFilms).values({ filmKey: item.filmKey, tmdbId: item.tmdbId, title: item.title, releaseYear: item.year, source: next ? "pick" : "film-page" })
+      .onConflictDoNothing();
+    await removeFromWatchlist([item.filmKey]);
+  }
+  revalidatePath("/", "layout");
+  // From Pick: straight on to another suggestion.
+  if (next.startsWith("/pick")) redirect(next);
+  back(itemId);
+}
