@@ -14,12 +14,13 @@ export type WatchStats = {
   /** Every year in the log (not just the selected one), split by kind of format. */
   perYear: { year: number; kind: Kind; n: number }[];
   decades: { decade: number; watches: number; owned: number }[];
-  directors: { name: string; films: number; watches: number }[];
-  actors: { name: string; films: number; watches: number }[];
+  /** films; watches = logged watches of them; never = films seen but never logged (every-film view only). */
+  directors: { name: string; films: number; watches: number; never?: number }[];
+  actors: { name: string; films: number; watches: number; never?: number }[];
   /** Women in the cast (TMDB gender); actors above are everyone else. */
-  actresses: { name: string; films: number; watches: number }[];
+  actresses: { name: string; films: number; watches: number; never?: number }[];
   /** Films in each genre (each film once), with their logged watches. */
-  genres: { name: string; films: number; watches: number }[];
+  genres: { name: string; films: number; watches: number; never?: number }[];
   rewatched: { title: string; year: number | null; times: number }[];
   shelf: { films: number; watched: number };
 };
@@ -43,7 +44,8 @@ export async function watchStats(year?: number, basis: Basis = "log"): Promise<W
 
   const people = (who: SQL) => seen
     ? run<WatchStats["actors"][number]>(sql`
-        select p.name, count(distinct s.film_key)::int as films, coalesce(sum(s.times_watched), 0)::int as watches
+        select p.name, count(distinct s.film_key)::int as films, coalesce(sum(s.times_watched), 0)::int as watches,
+          count(distinct s.film_key) filter (where s.times_watched = 0)::int as never
         from ${seenFilms} s join film_credits c on c.tmdb_id = s.tmdb_id join people p on p.tmdb_person_id = c.person_id
         where ${who} group by p.tmdb_person_id, p.name order by films desc, watches desc, p.name limit ${TOP}`)
     : run<WatchStats["actors"][number]>(sql`
@@ -84,7 +86,8 @@ export async function watchStats(year?: number, basis: Basis = "log"): Promise<W
 
     // Genres: films (each once) and their logged watches; films in the log, or every film seen.
     run<WatchStats["genres"][number]>(seen
-      ? sql`select g as name, count(*)::int as films, coalesce(sum(s.times_watched), 0)::int as watches
+      ? sql`select g as name, count(*)::int as films, coalesce(sum(s.times_watched), 0)::int as watches,
+          count(*) filter (where s.times_watched = 0)::int as never
           from ${seenFilms} s, unnest(s.genres) g group by g order by films desc limit 12`
       : sql`select g as name, count(distinct w.film_key)::int as films, count(*)::int as watches
           from watches w join films f on f.tmdb_id = w.tmdb_id, unnest(f.genres) g

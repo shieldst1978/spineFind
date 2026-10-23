@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { connection } from "next/server";
 import { LogWatchForm } from "@/components/log-watch-form";
+import { WatchTabs } from "@/components/watch-tabs";
 import { listViewingFormats } from "@/db/queries";
 
 export const metadata: Metadata = { title: "Log a watch · SpineFind" };
@@ -29,11 +29,9 @@ export default async function NewWatchPage({ searchParams }: PageProps<"/watches
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" });
   return (
     <main className="mx-auto w-full max-w-xl flex-1 px-4 py-6">
-      <header className="mb-6 flex items-baseline justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Log a watch</h1>
-        <Link href="/watches" className="shrink-0 rounded-lg px-2 py-1.5 text-sm text-stone-600 underline hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800">
-          Your watch log →
-        </Link>
+      <div className="mb-4"><WatchTabs active="film-log" /></div>
+      <header className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Log a film</h1>
       </header>
       <LogWatchForm formats={formats} today={today} initial={initial} />
     </main>

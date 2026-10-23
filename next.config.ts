@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
       // A server action's redirect() in a plain (pre-JavaScript) form post is sent
       // without the base path, e.g. "/watches?logged=…". Catch those and put the
       // prefix back; with JavaScript running, Next adds it itself.
-      ...["/watches/:path*", "/item/:path*", "/box/:path*", "/pick", "/add", "/shelf"].map((source) => ({
+      ...["/watches/:path*", "/item/:path*", "/box/:path*", "/pick", "/add", "/shelf", "/tv/:path*", "/tv"].map((source) => ({
         source,
         destination: `${BASE_PATH}${source}`,
         basePath: false as const,

@@ -272,3 +272,46 @@ export async function getCreditGenders(tmdbId: number): Promise<{ personId: numb
   const data = await get<{ cast: P[]; crew: P[] }>(`/movie/${tmdbId}/credits`);
   return [...data.cast, ...data.crew].filter((p) => p.gender).map((p) => ({ personId: p.id, gender: p.gender! }));
 }
+
+// ---- TV
+
+export type TvSearchResult = { tmdbTvId: number; name: string; year: number | null; posterPath: string | null; voteCount: number };
+
+export async function searchTv(query: string): Promise<TvSearchResult[]> {
+  const data = await get<{ results: { id: number; name: string; first_air_date?: string; poster_path: string | null; vote_count?: number }[] }>(
+    "/search/tv", { query, include_adult: "false" },
+  );
+  return data.results.map((r) => ({ tmdbTvId: r.id, name: r.name, year: yearOf(r.first_air_date), posterPath: r.poster_path, voteCount: r.vote_count ?? 0 }));
+}
+
+export type TvShowFull = {
+  tmdbTvId: number; name: string; originalName: string | null; firstAirDate: string | null; lastAirDate: string | null;
+  status: string | null; numberOfSeasons: number | null; numberOfEpisodes: number | null; genres: string[]; networks: string[];
+  creators: string[]; posterPath: string | null; overview: string | null; voteAverage: number | null;
+  seasons: { seasonNumber: number; name: string | null; airDate: string | null; episodeCount: number | null; posterPath: string | null }[];
+};
+
+export async function getTvShow(tmdbTvId: number): Promise<TvShowFull> {
+  const m = await get<{
+    id: number; name: string; original_name: string | null; first_air_date: string | null; last_air_date: string | null; status: string | null;
+    number_of_seasons: number | null; number_of_episodes: number | null; genres: { name: string }[]; networks: { name: string }[];
+    created_by: { name: string }[]; poster_path: string | null; overview: string | null; vote_average: number | null;
+    seasons: { season_number: number; name: string | null; air_date: string | null; episode_count: number | null; poster_path: string | null }[];
+  }>(`/tv/${tmdbTvId}`);
+  return {
+    tmdbTvId: m.id, name: m.name, originalName: m.original_name, firstAirDate: m.first_air_date || null, lastAirDate: m.last_air_date || null,
+    status: m.status, numberOfSeasons: m.number_of_seasons, numberOfEpisodes: m.number_of_episodes,
+    genres: m.genres.map((g) => g.name), networks: m.networks.map((n) => n.name), creators: m.created_by.map((c) => c.name),
+    posterPath: m.poster_path, overview: m.overview || null, voteAverage: m.vote_average ?? null,
+    seasons: m.seasons.map((s) => ({ seasonNumber: s.season_number, name: s.name, airDate: s.air_date || null, episodeCount: s.episode_count, posterPath: s.poster_path })),
+  };
+}
+
+export type TvEpisode = { episodeNumber: number; name: string | null; airDate: string | null; runtime: number | null; tmdbEpisodeId: number };
+
+export async function getTvSeason(tmdbTvId: number, seasonNumber: number): Promise<TvEpisode[]> {
+  const s = await get<{ episodes: { episode_number: number; name: string | null; air_date: string | null; runtime: number | null; id: number }[] }>(
+    `/tv/${tmdbTvId}/season/${seasonNumber}`,
+  );
+  return s.episodes.map((e) => ({ episodeNumber: e.episode_number, name: e.name, airDate: e.air_date || null, runtime: e.runtime ?? null, tmdbEpisodeId: e.id }));
+}

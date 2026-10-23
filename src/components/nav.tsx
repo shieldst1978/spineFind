@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const LINKS = [
   // First: Log a watch is the front page and the thing you do most; the log is linked from there.
-  { href: "/watches/new", label: "Watches", match: (p: string) => p === "/" || p.startsWith("/watches") },
+  { href: "/watches/new", label: "Watches", match: (p: string) => p === "/" || p.startsWith("/watches") || p.startsWith("/tv") },
   { href: "/shelf", label: "Shelf", match: (p: string) => p === "/shelf" || p.startsWith("/item") || p.startsWith("/box") || p === "/add" },
   { href: "/pick", label: "Pick", match: (p: string) => p.startsWith("/pick") },
   { href: "/ask", label: "Ask", match: (p: string) => p.startsWith("/ask") },

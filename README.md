@@ -27,6 +27,9 @@ A personal catalogue of the films on my shelves, searchable by spine colour, and
 | **Film page** | `/spinefind/item/<id>` | A film in a box: watched status, TMDB details (director, top cast, genres, UK certificate and release date, "also known as"), "I watched this" (defaults to the copy's disc format), "Seen before, no date", watch history with edit links. |
 | **Watches** | `/spinefind/watches` | The watch log as a table: release decade, age when watched, rewatch count ("2nd of 6"), owned copy, format. Filter, sort, page; summary cards for the filtered set. |
 | **Log a watch** | `/spinefind/watches/new` (also the front page, `/spinefind`) | Log any film, owned or not. Suggestions come from your log, shelf and TMDB; picking a film you own sets the format to your copy. New viewing formats can be added inline. |
+| **Log TV** | `/spinefind/tv` | TV, kept apart from films: find a show (TMDB), see the shows you're watching with progress. |
+| **TV show** | `/spinefind/tv/<tmdb tv id>` | Progress, a one-tap **Watched it** for the next episode, and each season's episodes to tick, or **Whole season** (optionally "from memory"). Format defaults to what you last used for the show, else its network. |
+| **TV log** | `/spinefind/watches/tv` | Every episode logged, newest first, with rewatch numbering ("2nd time") and delete. |
 | **Watch edit** | `/spinefind/watches/<id>` | Correct a watch's title, year, date or format, or delete it (two taps). Works for imported watches too. |
 | **Pick** | `/spinefind/pick` | Choose a film to watch at random: unwatched / rewatch / anything, by decade (or a random "surprise" decade), format, spine colour, "not seen in N years". Shows TMDB details and which spine to look for. Or **on my streaming services**: unwatched films from TMDB's catalogue of what's on your services (best known first), or rewatches from your log that are on them now; "Seen it before" counts a film as watched, and "Log a watch" opens pre-filled. |
 | **Ask** | `/spinefind/ask` | Chat with an assistant (Claude Sonnet 5.5 on Microsoft Foundry) about your collection and watching: it queries your data read-only, checks UK streaming, searches TMDB and the web. Conversations are saved; a daily cost cap applies. |
@@ -107,6 +110,8 @@ src/
     pick/page.tsx               Pick a film; pick/services-pick.tsx: picking on your streaming services
     review/page.tsx             Review TMDB matches; review/actions.ts: confirmMatch, rejectMatch, markAsTv, reopenMatch
     stats/page.tsx              Stats (queries in db/stats.ts)
+    tv/page.tsx                 Log TV (shows you're watching, TMDB search); tv/[id]/page.tsx show page; tv/actions.ts
+    watches/tv/page.tsx         TV log
     watchlist/page.tsx          Watchlist; settings/imdb-actions.ts: uploadImdb (watch history and/or watchlist CSVs)
     seen/page.tsx               Seen before? bulk ticking; seen/actions.ts: markSeenBefore
     ask/page.tsx                The assistant chat; ask/stream/route.ts streams answers (NDJSON); components/ask-chat.tsx
@@ -129,6 +134,7 @@ src/
     films.ts                    cacheFilm() (full TMDB record), detailsForItem() (confident title+year match only)
     film-link.ts                linkTmdbId(): a saved film inherits its title+year's TMDB link; enrichFilms()
     enrich.ts                   storeFilm(): writes a full TMDB record (film, people, credits, titles)
+    tv.ts                       TV: ensureShow/ensureSeason (TMDB), showPage (progress, next episode), logEpisodes, tvLog
     imdb.ts                     importSeenFromImdb: an IMDb watch-history/ratings CSV → films seen
     watchlist.ts                syncWatchlist (IMDb CSV), removeFromWatchlist, listWatchlist, pickFromWatchlist
     assistant.ts                Assistant conversations, daily spend, and the read-only SQL runner
@@ -153,7 +159,7 @@ scripts/
   enrich.ts                     Match every film to TMDB and store its full record (see TMDB enrichment)
   start.mjs                     Container entry point: run migrations, then start Next
   ops/                          PowerShell helpers: deploy, enrichment runs, ask, assistant secrets (see ops/README.md)
-drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films, 0006 assistant conversations, 0007 assistant views, 0008 seen_films keyed by film, 0009 watchlist, 0010 assistant_watches.logged_at, 0011 people.gender)
+drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films, 0006 assistant conversations, 0007 assistant views, 0008 seen_films keyed by film, 0009 watchlist, 0010 assistant_watches.logged_at, 0011 people.gender, 0012 TV tables)
 docs/schema.md                  Original data-model design notes (schema.ts is authoritative)
 Dockerfile, .dockerignore       Container image build (personal data and secrets excluded)
 .github/workflows/build.yml     Build and push the image on every push to main
@@ -175,6 +181,8 @@ Dockerfile, .dockerignore       Container image build (personal data and secrets
 | `seen_films` | **Films** seen with no logged watch (not discs) | `film_key`, `tmdb_id`, `title`, `release_year`, `source` (`imdb` watch history, `seen-page`, `pick`) |
 | `watchlist` | Films you want to watch (from your IMDb watchlist) | `film_key`, `tmdb_id`, `imdb_id`, `title`, `release_year`, `added_on`, `source` |
 | `film_availability` | Where a film can be watched in the UK, cached for a day | `offers` (stream / free / ads / rent / buy), `fetched_at` |
+| `tv_shows`, `tv_seasons`, `tv_episodes` | TV from TMDB (separate from `films`; TV ids are their own space) | shows (networks, creators, status), seasons, episodes (fetched a season at a time, refreshed when stale) |
+| `tv_watches` | One viewing of one **episode** (a whole season logged at once = one row per episode) | `tmdb_tv_id`, `season_number`, `episode_number`, `watched_on`, `format_id`, `from_memory`; seasons/series progress is worked out from these |
 | `assistant_conversations`, `assistant_messages` | Saved assistant chats | messages stored exactly as sent to/from Claude (incl. tool calls), with `usage` and `cost_usd` |
 | `assistant_films`, `assistant_watches` (views) | What the assistant queries | one row per film (ownership, shelf, spine, watch counts, TMDB details) / per watch |
 | `tmdb_matches` | The matcher's answer per title + year as entered | `status` (auto / review / confirmed / rejected / unmatched), `tmdb_id`, `method` (why), `candidates` |

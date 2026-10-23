@@ -26,7 +26,12 @@ export default async function StatsPage({ searchParams }: PageProps<"/stats">) {
   const years = [...new Set(s.perYear.map((r) => r.year))].sort((a, b) => b - a);
   const t = s.totals;
   const films = seen ? "films seen" : "films watched";
-  const extra = (r: { films: number; watches: number }) => (r.watches > r.films ? `${r.watches} logged watches` : "");
+  // Log view: watches only when there are rewatches. Every-film view: always, so films never logged are visible.
+  // Rewatches show as a watch count above the film count; in the every-film view, also how many were never logged.
+  const extra = (r: { films: number; watches: number; never?: number }) => {
+    const logged = r.films - (r.never ?? 0);
+    return [r.watches > logged ? `${r.watches} watches` : "", r.never ? `${r.never} never logged` : ""].filter(Boolean).join(" · ");
+  };
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-3xl flex-1 space-y-5 px-4 py-6">
@@ -97,10 +102,10 @@ export default async function StatsPage({ searchParams }: PageProps<"/stats">) {
           <Decades rows={s.decades} year={year} seen={seen} />
 
           <div className="grid gap-5 sm:grid-cols-2">
-            <Ranked title="Directors" note={films} rows={s.directors.map((d) => ({ label: d.name, n: d.films, extra: extra(d) }))} />
-            <Ranked title="Actors" note={`${films}, top 10 billed`} rows={s.actors.map((a) => ({ label: a.name, n: a.films, extra: extra(a) }))} />
-            <Ranked title="Actresses" note={`${films}, top 10 billed`} rows={s.actresses.map((a) => ({ label: a.name, n: a.films, extra: extra(a) }))} />
-            <Ranked title="Genres" note={films} rows={s.genres.map((g) => ({ label: g.name, n: g.films, extra: extra(g) }))} />
+            <Ranked title="Directors" note={films} unit="films" rows={s.directors.map((d) => ({ label: d.name, n: d.films, extra: extra(d) }))} />
+            <Ranked title="Actors" note={`${films}, top 10 billed`} unit="films" rows={s.actors.map((a) => ({ label: a.name, n: a.films, extra: extra(a) }))} />
+            <Ranked title="Actresses" note={`${films}, top 10 billed`} unit="films" rows={s.actresses.map((a) => ({ label: a.name, n: a.films, extra: extra(a) }))} />
+            <Ranked title="Genres" note={films} unit="films" rows={s.genres.map((g) => ({ label: g.name, n: g.films, extra: extra(g) }))} />
             <Ranked title="Most rewatched" note="times watched, from your log" rows={s.rewatched.map((r) => ({ label: `${r.title}${r.year ? ` (${r.year})` : ""}`, n: r.times, extra: "" }))}
               empty={year ? `Nothing watched twice in ${year}.` : "No rewatches yet."} />
           </div>
@@ -213,7 +218,7 @@ function Bar({ width, className, label }: { width: number; className: string; la
   );
 }
 
-function Ranked({ title, note, rows, empty }: { title: string; note: string; rows: { label: string; n: number; extra: string }[]; empty?: string }) {
+function Ranked({ title, note, rows, empty, unit }: { title: string; note: string; rows: { label: string; n: number; extra: string }[]; empty?: string; unit?: string }) {
   const max = Math.max(...rows.map((r) => r.n), 1);
   return (
     <section className={`${card} space-y-2`}>
@@ -226,7 +231,10 @@ function Ranked({ title, note, rows, empty }: { title: string; note: string; row
             <li key={r.label} className="text-sm">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="min-w-0 break-words">{r.label}</span>
-                <span className="shrink-0 tabular-nums">{r.n}{r.extra && <span className="text-xs text-stone-500"> · {r.extra}</span>}</span>
+                <span className="shrink-0 tabular-nums">
+                  {r.n}{unit && <span className="text-xs text-stone-500"> {r.n === 1 ? unit.replace(/s$/, "") : unit}</span>}
+                  {r.extra && <span className="text-xs text-stone-500"> · {r.extra}</span>}
+                </span>
               </div>
               <span className="mt-0.5 block h-1 rounded-sm bg-stone-300 dark:bg-stone-600" style={{ width: `${(100 * r.n) / max}%` }} />
             </li>

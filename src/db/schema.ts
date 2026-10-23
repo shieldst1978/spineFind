@@ -8,6 +8,7 @@ import {
   pgEnum,
   pgTable,
   pgView,
+  primaryKey,
   real,
   serial,
   text,
@@ -330,4 +331,77 @@ export const watchlist = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("watchlist_tmdb_idx").on(t.tmdbId)],
+);
+
+// ---- TV: entirely separate from films. The episode is the unit; seasons and series are worked out from episodes.
+
+/** A TV series from TMDB (its TV ids are a separate space from film ids). */
+export const tvShows = pgTable("tv_shows", {
+  tmdbTvId: integer("tmdb_tv_id").primaryKey(),
+  name: text("name").notNull(),
+  originalName: text("original_name"),
+  firstAirDate: date("first_air_date"),
+  lastAirDate: date("last_air_date"),
+  /** TMDB's status, e.g. "Returning Series", "Ended". */
+  status: text("status"),
+  numberOfSeasons: integer("number_of_seasons"),
+  numberOfEpisodes: integer("number_of_episodes"),
+  genres: text("genres").array().notNull().default(sql`'{}'::text[]`),
+  networks: text("networks").array().notNull().default(sql`'{}'::text[]`),
+  creators: text("creators").array().notNull().default(sql`'{}'::text[]`),
+  posterPath: text("poster_path"),
+  overview: text("overview"),
+  voteAverage: real("vote_average"),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** A season of a show. Season 0 is TMDB's "Specials". */
+export const tvSeasons = pgTable(
+  "tv_seasons",
+  {
+    tmdbTvId: integer("tmdb_tv_id").notNull().references(() => tvShows.tmdbTvId, { onDelete: "cascade" }),
+    seasonNumber: integer("season_number").notNull(),
+    name: text("name"),
+    airDate: date("air_date"),
+    episodeCount: integer("episode_count"),
+    posterPath: text("poster_path"),
+    /** When its episode list was last fetched (null until first needed). */
+    episodesFetchedAt: timestamp("episodes_fetched_at", { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.tmdbTvId, t.seasonNumber] })],
+);
+
+export const tvEpisodes = pgTable(
+  "tv_episodes",
+  {
+    tmdbTvId: integer("tmdb_tv_id").notNull().references(() => tvShows.tmdbTvId, { onDelete: "cascade" }),
+    seasonNumber: integer("season_number").notNull(),
+    episodeNumber: integer("episode_number").notNull(),
+    name: text("name"),
+    airDate: date("air_date"),
+    runtime: integer("runtime"),
+    tmdbEpisodeId: integer("tmdb_episode_id"),
+  },
+  (t) => [primaryKey({ columns: [t.tmdbTvId, t.seasonNumber, t.episodeNumber] })],
+);
+
+/** One viewing of one episode. A whole season logged at once is one row per episode. */
+export const tvWatches = pgTable(
+  "tv_watches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tmdbTvId: integer("tmdb_tv_id").notNull().references(() => tvShows.tmdbTvId),
+    seasonNumber: integer("season_number").notNull(),
+    episodeNumber: integer("episode_number").notNull(),
+    watchedOn: date("watched_on").notNull(),
+    formatId: integer("format_id").notNull().references(() => viewingFormats.id),
+    /** Logged in bulk from memory (e.g. "watched the whole season") rather than as it was watched. */
+    fromMemory: boolean("from_memory").notNull().default(false),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("tv_watches_show_idx").on(t.tmdbTvId, t.seasonNumber, t.episodeNumber),
+    index("tv_watches_date_idx").on(t.watchedOn),
+  ],
 );

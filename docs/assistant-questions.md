@@ -28,6 +28,7 @@ the answers; those come from the data later.
 - What is the average release year of films I watch?
 - Given the films I have watched recently, recommend me something that us underrated and underwatched
 - Can you put me together a 7 day/30 day watching challenge based on films I haven't watched?
+- Can you suggest some Oscar nominated films that I haven't watched?
 
 
 ## Words with a special meaning
@@ -47,3 +48,4 @@ House rules the assistant should know. Add any you think of. (The live copy the 
 - **In ages**: not watched for more than five years.
 - **Underrated / underwatched**: a high TMDB score with few votes.
 - **Missing Pieces**: Unwatched films from an actor or director.
+- **Oscar Nominated Films**: Films which were nominated for Academy awards in a given year.

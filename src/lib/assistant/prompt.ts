@@ -14,6 +14,9 @@ const HOUSE_RULES = `
 - Year: the release year as Tim entered it, usually the UK release year.
 - Recommend from where: either "on the shelf" (owned, on the shelf, not in the loft) or "anything" (including films he doesn't own, e.g. on his streaming services). If he doesn't say which, ask before recommending.
 - Underrated / underwatched: a high TMDB score with few votes. As a rough guide, vote_average 7 or more with vote_count under 1,000.
+- Oscar nominated: films nominated for an Academy Award in a given year (any category unless he names one, e.g. Best Picture).
+  There's no awards data in the database: search the web for that ceremony's nominees (say which year you used; if he
+  gives no year, ask, or use recent ceremonies and say so), then check each against his data and list the unwatched ones.
 - Missing pieces: films by a given actor or director that Tim hasn't watched. Start with ones he owns (shelf, then loft),
   then others (on his watchlist or streaming on his services). For films outside his data, search TMDB.
 - Dates such as birthdays: Tim gives any date that matters in the question. Never assume one.
