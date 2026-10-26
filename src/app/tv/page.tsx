@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { recentShows } from "@/db/tv";
+import { recentShows, seenShows } from "@/db/tv";
 import { withBase } from "@/lib/base-path";
 import { searchTv, tmdbEnabled } from "@/lib/tmdb";
 import { WatchTabs } from "@/components/watch-tabs";
@@ -14,8 +14,9 @@ const field = "min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 p
 export default async function TvPage({ searchParams }: PageProps<"/tv">) {
   const sp = await searchParams;
   const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.trim() ?? "";
-  const [watching, results] = await Promise.all([
+  const [watching, seen, results] = await Promise.all([
     recentShows(),
+    seenShows(),
     q && tmdbEnabled() ? searchTv(q).then((r) => r.slice(0, 10)).catch(() => null) : Promise.resolve([]),
   ]);
 
@@ -64,6 +65,25 @@ export default async function TvPage({ searchParams }: PageProps<"/tv">) {
                     <span className="block text-xs text-stone-500">
                       {s.episodes_watched}{s.total ? ` of ${s.total}` : ""} episodes · last {fmt(s.last_watched)}{s.status === "Ended" && s.total && s.episodes_watched >= s.total ? " · finished" : ""}
                     </span>
+                  </span>
+                  <span className="shrink-0 text-xs text-stone-500">›</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {seen.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="font-medium">Seen before <span className="text-xs font-normal text-stone-500">· no dates, e.g. from IMDb</span></h2>
+          <ul className="divide-y divide-stone-200 rounded-lg border border-stone-200 bg-white dark:divide-stone-800 dark:border-stone-800 dark:bg-stone-900">
+            {seen.map((s) => (
+              <li key={s.tmdb_tv_id}>
+                <Link href={`/tv/${s.tmdb_tv_id}`} className="flex items-center gap-3 px-3 py-2 hover:bg-stone-50 dark:hover:bg-stone-800">
+                  <Poster path={s.poster_path} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words text-sm">{s.name}</span>
+                    <span className="block text-xs text-stone-500">{s.seen}{s.total ? ` of ${s.total}` : ""} episodes seen</span>
                   </span>
                   <span className="shrink-0 text-xs text-stone-500">›</span>
                 </Link>

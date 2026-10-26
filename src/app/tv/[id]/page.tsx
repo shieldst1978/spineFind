@@ -42,7 +42,7 @@ export default async function TvShowPage({ params, searchParams }: PageProps<"/t
         <div className="min-w-0 space-y-1">
           <h1 className="break-words text-2xl font-semibold tracking-tight">{show.name}{years && <span className="font-normal text-stone-500"> ({years})</span>}</h1>
           {facts && <p className="text-sm text-stone-600 dark:text-stone-400">{facts}</p>}
-          <p className="text-sm">{watchedEpisodes} of {totalEpisodes} episodes watched</p>
+          <p className="text-sm">{watchedEpisodes} of {totalEpisodes} episodes seen</p>
         </div>
       </header>
 
@@ -110,7 +110,11 @@ function Season({ tmdbTvId, s, open, formats, defaultFormat, today }: {
                   <input type="checkbox" name="episode" value={e.episodeNumber} className="size-5 shrink-0" />
                   <span className="w-8 shrink-0 tabular-nums text-stone-500">E{e.episodeNumber}</span>
                   <span className="min-w-0 flex-1 break-words">{e.name ?? `Episode ${e.episodeNumber}`}</span>
-                  {e.times > 0 && <span className="shrink-0 text-xs text-emerald-700 dark:text-emerald-400">✓{e.times > 1 ? ` ×${e.times}` : ""}</span>}
+                  {e.times > 0 ? (
+                    <span className="shrink-0 text-xs text-emerald-700 dark:text-emerald-400">✓{e.times > 1 ? ` ×${e.times}` : ""}</span>
+                  ) : e.seen ? (
+                    <span className="shrink-0 text-xs text-stone-500" title="Seen before, no date (e.g. from IMDb)">✓ seen</span>
+                  ) : null}
                 </label>
               </li>
             ))}

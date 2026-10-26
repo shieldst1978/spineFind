@@ -40,7 +40,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             Export from IMDb and upload either or both files whenever they change; it&apos;s safe to upload the same file again.
           </p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-stone-600 dark:text-stone-400">
-            <li><strong className="font-medium">Watch history</strong> (or your ratings): films you&apos;ve seen are marked seen, not your discs. TV is skipped.</li>
+            <li><strong className="font-medium">Watch history</strong> (or your ratings): films you&apos;ve seen are marked seen, not your discs. TV goes to your TV: a series marked on IMDb counts as every episode seen.</li>
             <li><strong className="font-medium">Watchlist</strong>: new films are added, ones removed on IMDb come off, and films you&apos;ve seen are left out.
               {onWatchlist > 0 && <> <Link href="/watchlist" className="underline">{onWatchlist} films on your watchlist</Link>.</>}</li>
           </ul>
@@ -51,7 +51,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               <p>
                 Watch history: {n("seen_marked")} newly marked seen; {n("seen_logged")} already known.
                 {n("seen_off") > 0 && ` ${n("seen_off")} taken off your watchlist.`}
-                {n("seen_tv") > 0 && ` ${n("seen_tv")} TV titles skipped.`}
+                {n("tv_marked") > 0 ? ` TV: ${n("tv_marked")} episodes newly marked seen across ${n("tv_shows")} shows.` : n("seen_tv") > 0 ? " TV already up to date." : ""}
               </p>
             )}
             {syncedList && (

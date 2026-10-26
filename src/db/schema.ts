@@ -405,3 +405,17 @@ export const tvWatches = pgTable(
     index("tv_watches_date_idx").on(t.watchedOn),
   ],
 );
+
+/** TV episodes seen with no dated watch (e.g. from IMDb: a whole series marked seen = every episode). */
+export const tvSeen = pgTable(
+  "tv_seen",
+  {
+    tmdbTvId: integer("tmdb_tv_id").notNull().references(() => tvShows.tmdbTvId, { onDelete: "cascade" }),
+    seasonNumber: integer("season_number").notNull(),
+    episodeNumber: integer("episode_number").notNull(),
+    /** 'imdb-series' (whole series marked on IMDb), 'imdb-episode', or 'app'. */
+    source: text("source").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tmdbTvId, t.seasonNumber, t.episodeNumber] })],
+);

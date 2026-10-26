@@ -57,7 +57,8 @@ export async function ensureSeason(tmdbTvId: number, seasonNumber: number) {
   }
 }
 
-export type EpisodeRow = { episodeNumber: number; name: string | null; airDate: string | null; runtime: number | null; times: number; lastWatched: string | null };
+/** times = dated watches (tv_watches); seen = marked seen with no date (tv_seen, e.g. from IMDb). */
+export type EpisodeRow = { episodeNumber: number; name: string | null; airDate: string | null; runtime: number | null; times: number; lastWatched: string | null; seen: boolean };
 export type SeasonRow = { seasonNumber: number; name: string | null; airDate: string | null; episodeCount: number; watched: number; episodes: EpisodeRow[] | null };
 export type ShowPage = {
   show: typeof tvShows.$inferSelect;
@@ -78,27 +79,33 @@ export async function showPage(tmdbTvId: number, openSeason?: number): Promise<S
   const [show] = await db.select().from(tvShows).where(eq(tvShows.tmdbTvId, tmdbTvId));
   if (!show) return null;
   const seasons = await db.select().from(tvSeasons).where(eq(tvSeasons.tmdbTvId, tmdbTvId)).orderBy(asc(tvSeasons.seasonNumber));
-  const watchedSeasons = new Set((await db.execute<{ s: number }>(sql`select distinct season_number as s from tv_watches where tmdb_tv_id = ${tmdbTvId}`)).rows.map((r) => r.s));
+  const watchedSeasons = new Set((await db.execute<{ s: number }>(sql`
+    select distinct season_number as s from tv_watches where tmdb_tv_id = ${tmdbTvId}
+    union select distinct season_number from tv_seen where tmdb_tv_id = ${tmdbTvId}`)).rows.map((r) => r.s));
   // Seasons worth having episodes for: started ones, the first regular season, the one after the latest started, and any asked for.
   const regular = seasons.filter((s) => s.seasonNumber > 0).map((s) => s.seasonNumber);
   const latest = Math.max(0, ...[...watchedSeasons]);
   const wanted = new Set<number>([...watchedSeasons, regular[0] ?? 1, regular.find((n) => n > latest) ?? -1, ...(openSeason !== undefined ? [openSeason] : [])]);
   await Promise.all([...wanted].filter((n) => seasons.some((s) => s.seasonNumber === n)).map((n) => ensureSeason(tmdbTvId, n)));
 
-  const eps = await db.execute<{ season_number: number; episode_number: number; name: string | null; air_date: string | null; runtime: number | null; times: number; last_watched: string | null }>(sql`
+  const eps = await db.execute<{ season_number: number; episode_number: number; name: string | null; air_date: string | null; runtime: number | null; times: number; last_watched: string | null; seen: boolean }>(sql`
     select e.season_number, e.episode_number, e.name, e.air_date::text as air_date, e.runtime,
-      count(w.id)::int as times, max(w.watched_on)::text as last_watched
+      count(w.id)::int as times, max(w.watched_on)::text as last_watched,
+      exists (select 1 from tv_seen s where s.tmdb_tv_id = e.tmdb_tv_id and s.season_number = e.season_number and s.episode_number = e.episode_number) as seen
     from tv_episodes e left join tv_watches w on w.tmdb_tv_id = e.tmdb_tv_id and w.season_number = e.season_number and w.episode_number = e.episode_number
     where e.tmdb_tv_id = ${tmdbTvId}
-    group by e.season_number, e.episode_number, e.name, e.air_date, e.runtime order by 1, 2`);
+    group by e.tmdb_tv_id, e.season_number, e.episode_number, e.name, e.air_date, e.runtime order by 1, 2`);
   const fetched = new Map<number, EpisodeRow[]>();
   for (const e of eps.rows) {
     const list = fetched.get(e.season_number) ?? [];
-    list.push({ episodeNumber: e.episode_number, name: e.name, airDate: e.air_date, runtime: e.runtime, times: e.times, lastWatched: e.last_watched });
+    list.push({ episodeNumber: e.episode_number, name: e.name, airDate: e.air_date, runtime: e.runtime, times: e.times, lastWatched: e.last_watched, seen: e.seen });
     fetched.set(e.season_number, list);
   }
+  // Episodes watched or marked seen, each once.
   const counts = new Map((await db.execute<{ s: number; n: number }>(sql`
-    select season_number as s, count(distinct episode_number)::int as n from tv_watches where tmdb_tv_id = ${tmdbTvId} group by 1`)).rows.map((r) => [r.s, r.n]));
+    select season_number as s, count(distinct episode_number)::int as n from (
+      select season_number, episode_number from tv_watches where tmdb_tv_id = ${tmdbTvId}
+      union select season_number, episode_number from tv_seen where tmdb_tv_id = ${tmdbTvId}) x group by 1`)).rows.map((r) => [r.s, r.n]));
   const rows: SeasonRow[] = seasons.map((s) => ({
     seasonNumber: s.seasonNumber, name: s.name, airDate: s.airDate, episodeCount: s.episodeCount ?? fetched.get(s.seasonNumber)?.length ?? 0,
     watched: counts.get(s.seasonNumber) ?? 0, episodes: fetched.get(s.seasonNumber) ?? null,
@@ -112,7 +119,8 @@ export async function showPage(tmdbTvId: number, openSeason?: number): Promise<S
   let next: ShowPage["next"] = null;
   if (ordered.length) {
     const i = last ? ordered.findIndex((e) => e.seasonNumber === last.season_number && e.episodeNumber === last.episode_number) : -1;
-    const candidate = last ? (i >= 0 ? ordered[i + 1] : undefined) : ordered[0];
+    // No dated watches yet: the first episode not already seen (so a show seen up to S2 offers S3 E1).
+    const candidate = last ? (i >= 0 ? ordered[i + 1] : undefined) : ordered.find((e) => !e.seen && e.times === 0);
     if (candidate) next = { seasonNumber: candidate.seasonNumber, episodeNumber: candidate.episodeNumber, name: candidate.name };
   }
   const totalEpisodes = rows.filter((s) => s.seasonNumber > 0).reduce((a, s) => a + s.episodeCount, 0);
@@ -139,6 +147,16 @@ export async function recentShows(limit = 12) {
       s.number_of_episodes as total, s.status
     from tv_watches w join tv_shows s on s.tmdb_tv_id = w.tmdb_tv_id
     group by s.tmdb_tv_id order by max(w.created_at) desc limit ${limit}`);
+  return r.rows;
+}
+
+/** Shows seen (e.g. from IMDb) without any dated watches yet: most episodes first. */
+export async function seenShows() {
+  const r = await db.execute<{ tmdb_tv_id: number; name: string; poster_path: string | null; seen: number; total: number | null }>(sql`
+    select s.tmdb_tv_id, s.name, s.poster_path, count(*) filter (where t.season_number > 0)::int as seen, s.number_of_episodes as total
+    from tv_seen t join tv_shows s on s.tmdb_tv_id = t.tmdb_tv_id
+    where not exists (select 1 from tv_watches w where w.tmdb_tv_id = t.tmdb_tv_id)
+    group by s.tmdb_tv_id order by lower(s.name)`);
   return r.rows;
 }
 

@@ -159,7 +159,7 @@ scripts/
   enrich.ts                     Match every film to TMDB and store its full record (see TMDB enrichment)
   start.mjs                     Container entry point: run migrations, then start Next
   ops/                          PowerShell helpers: deploy, enrichment runs, ask, assistant secrets (see ops/README.md)
-drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films, 0006 assistant conversations, 0007 assistant views, 0008 seen_films keyed by film, 0009 watchlist, 0010 assistant_watches.logged_at, 0011 people.gender, 0012 TV tables)
+drizzle/                        SQL migrations (0000 init, 0001 pg_trgm, 0002 TMDB enrichment tables, 0003 film_key, 0004 streaming, 0005 seen_films, 0006 assistant conversations, 0007 assistant views, 0008 seen_films keyed by film, 0009 watchlist, 0010 assistant_watches.logged_at, 0011 people.gender, 0012 TV tables, 0013 tv_seen)
 docs/schema.md                  Original data-model design notes (schema.ts is authoritative)
 Dockerfile, .dockerignore       Container image build (personal data and secrets excluded)
 .github/workflows/build.yml     Build and push the image on every push to main
@@ -182,6 +182,7 @@ Dockerfile, .dockerignore       Container image build (personal data and secrets
 | `watchlist` | Films you want to watch (from your IMDb watchlist) | `film_key`, `tmdb_id`, `imdb_id`, `title`, `release_year`, `added_on`, `source` |
 | `film_availability` | Where a film can be watched in the UK, cached for a day | `offers` (stream / free / ads / rent / buy), `fetched_at` |
 | `tv_shows`, `tv_seasons`, `tv_episodes` | TV from TMDB (separate from `films`; TV ids are their own space) | shows (networks, creators, status), seasons, episodes (fetched a season at a time, refreshed when stale) |
+| `tv_seen` | TV episodes seen with no dated watch (IMDb: a whole series marked = every episode) | `tmdb_tv_id`, `season_number`, `episode_number`, `source` (`imdb-series`, `imdb-episode`) |
 | `tv_watches` | One viewing of one **episode** (a whole season logged at once = one row per episode) | `tmdb_tv_id`, `season_number`, `episode_number`, `watched_on`, `format_id`, `from_memory`; seasons/series progress is worked out from these |
 | `assistant_conversations`, `assistant_messages` | Saved assistant chats | messages stored exactly as sent to/from Claude (incl. tool calls), with `usage` and `cost_usd` |
 | `assistant_films`, `assistant_watches` (views) | What the assistant queries | one row per film (ownership, shelf, spine, watch counts, TMDB details) / per watch |

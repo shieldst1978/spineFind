@@ -315,3 +315,15 @@ export async function getTvSeason(tmdbTvId: number, seasonNumber: number): Promi
   );
   return s.episodes.map((e) => ({ episodeNumber: e.episode_number, name: e.name, airDate: e.air_date || null, runtime: e.runtime ?? null, tmdbEpisodeId: e.id }));
 }
+
+export type TvImdbMatch = { kind: "show"; tmdbTvId: number } | { kind: "episode"; tmdbTvId: number; seasonNumber: number; episodeNumber: number };
+
+/** What an IMDb TV id (series or episode) is on TMDB, or null if TMDB doesn't know it. */
+export async function findTvByImdbId(imdbId: string): Promise<TvImdbMatch | null> {
+  const d = await get<{ tv_results?: { id: number }[]; tv_episode_results?: { show_id: number; season_number: number; episode_number: number }[] }>(
+    `/find/${imdbId}`, { external_source: "imdb_id" },
+  );
+  if (d.tv_results?.[0]) return { kind: "show", tmdbTvId: d.tv_results[0].id };
+  const e = d.tv_episode_results?.[0];
+  return e ? { kind: "episode", tmdbTvId: e.show_id, seasonNumber: e.season_number, episodeNumber: e.episode_number } : null;
+}

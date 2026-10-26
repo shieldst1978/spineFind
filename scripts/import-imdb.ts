@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { createDb } from "../src/db/client";
 import { enrichFilms } from "../src/db/film-link";
-import { importSeenFromImdb } from "../src/db/imdb";
+import { importSeenFromImdb, importTvSeenFromImdb } from "../src/db/imdb";
 import { refreshWatchlistAvailability } from "../src/db/streaming";
 import { syncWatchlist } from "../src/db/watchlist";
 
@@ -35,6 +35,10 @@ async function main() {
   const { newTmdbIds, sample, ...counts } = r;
   console.log("result:", JSON.stringify(counts));
   console.log(dryRun ? "would mark, e.g.:" : "marked, e.g.:", sample.join("; "));
+  if (!dryRun) {
+    const tv = await importTvSeenFromImdb(readFileSync(file, "utf8"));
+    console.log("TV:", JSON.stringify(tv));
+  }
   const toFetch = [...newTmdbIds];
   if (watchlistFile && !dryRun) {
     const w = await syncWatchlist(readFileSync(watchlistFile, "utf8"));

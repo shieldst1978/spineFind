@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { enrichFilms } from "@/db/film-link";
-import { importSeenFromImdb } from "@/db/imdb";
+import { importSeenFromImdb, importTvSeenFromImdb } from "@/db/imdb";
 import { refreshWatchlistAvailability } from "@/db/streaming";
 import { syncWatchlist } from "@/db/watchlist";
 
@@ -35,6 +35,9 @@ export async function uploadImdb(form: FormData) {
       p.set("seen_logged", String(r.logged + r.alreadySeen));
       p.set("seen_tv", String(r.skippedTv));
       p.set("seen_off", String(r.offWatchlist));
+      const tv = await importTvSeenFromImdb(history);
+      p.set("tv_shows", String(tv.series + tv.episodes ? tv.shows : 0));
+      p.set("tv_marked", String(tv.marked));
     }
     if (list) {
       const r = await syncWatchlist(list);
