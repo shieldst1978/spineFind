@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 import { addWatch, type FilmSuggestion, type LogWatchState } from "@/app/watches/actions";
 import { FilmTitleInput } from "@/components/film-title-input";
+import { FormatOptions } from "@/components/format-options";
 import { DISC_TO_MEDIA } from "@/db/seed-formats";
 
 const field =
@@ -17,7 +18,7 @@ const KINDS = [
   ["other", "Other"],
 ] as const;
 
-type Format = { id: number; name: string; kind: string; uses: number };
+type Format = { id: number; name: string; kind: string; uses: number; lastUsed?: string | null };
 
 /** Pre-filled from Pick: the film and, when it's on one of your services, that format. */
 export type LogWatchInitial = { title: string; year: number | null; tmdbId: number; formatId?: number };
@@ -47,14 +48,6 @@ export function LogWatchForm({ formats, today, initial }: { formats: Format[]; t
     }
   };
 
-  const byKind = (kind: string) => formats.filter((f) => f.kind === kind);
-  const groups: [string, Format[]][] = [
-    ["Streaming", byKind("streaming")],
-    ["TV", byKind("tv")],
-    ["Cinema", byKind("cinema")],
-    ["Disc", byKind("disc")],
-    ["Other", [...byKind("download"), ...byKind("other")]],
-  ];
 
   return (
     <form action={action} className="space-y-5">
@@ -90,11 +83,7 @@ export function LogWatchForm({ formats, today, initial }: { formats: Format[]; t
       <label className="block space-y-1">
         <span className="text-sm font-medium">Where</span>
         <select name="format_id" value={formatId} onChange={(e) => { setFormatId(e.target.value); setAutoFormat(null); }} className={field}>
-          {groups.filter(([, fs]) => fs.length).map(([label, fs]) => (
-            <optgroup key={label} label={label}>
-              {fs.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </optgroup>
-          ))}
+          <FormatOptions formats={formats} />
           <option value="new">New format…</option>
         </select>
       </label>

@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useActionState } from "react";
 import type { EditWatchState } from "@/app/watches/[id]/actions";
 import type { WatchDetail } from "@/db/queries";
+import { FormatOptions } from "@/components/format-options";
 
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base dark:border-stone-700 dark:bg-stone-900";
 
-type Format = { id: number; name: string; kind: string };
+type Format = { id: number; name: string; kind: string; lastUsed?: string | null };
 
 /**
  * `save` is the update action already bound to this watch on the server page.
@@ -20,7 +21,6 @@ export function EditWatchForm({ save, watch, formats, today, back }: {
   watch: WatchDetail; formats: Format[]; today: string; back: string;
 }) {
   const [state, action, pending] = useActionState<EditWatchState, FormData>(save, {});
-  const kinds = ["disc", "cinema", "streaming", "tv", "download", "other"];
 
   return (
     <form action={action} className="space-y-4">
@@ -42,14 +42,7 @@ export function EditWatchForm({ save, watch, formats, today, back }: {
       <label className="block space-y-1">
         <span className="text-sm font-medium">Where</span>
         <select name="format_id" defaultValue={watch.formatId} className={field}>
-          {kinds.map((k) => {
-            const fs = formats.filter((f) => f.kind === k);
-            return fs.length ? (
-              <optgroup key={k} label={k[0].toUpperCase() + k.slice(1)}>
-                {fs.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-              </optgroup>
-            ) : null;
-          })}
+          <FormatOptions formats={formats} />
         </select>
         {watch.fromMemory && (
           <span className="block text-xs text-stone-500">This format was filled in from memory (aNote didn&apos;t record it). Changing it marks it as confirmed.</span>

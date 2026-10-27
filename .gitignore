@@ -46,3 +46,6 @@ next-env.d.ts
 # Personal data-review checklists
 /data-corrections.md
 /anote-comparison.md
+
+# Background photos: kept in the private spinefindmedia storage account, not in git
+/images/

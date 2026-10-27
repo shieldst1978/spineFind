@@ -279,11 +279,21 @@ export async function getWatch(id: string): Promise<WatchDetail | null> {
   };
 }
 
+/**
+ * Viewing formats, most recently used first (films and TV), then never-used ones A–Z.
+ * lastUsed is the latest watch date in that format; uses counts film watches.
+ */
 export async function listViewingFormats() {
-  const r = await db.execute<{ id: number; name: string; kind: string; uses: number }>(sql`
-    select f.id, f.name, f.kind, count(w.id)::int as uses
-    from viewing_formats f left join watches w on w.format_id = f.id
-    group by f.id order by f.kind = 'disc' desc, uses desc, f.name`);
+  const r = await db.execute<{ id: number; name: string; kind: string; uses: number; lastUsed: string | null }>(sql`
+    with used as (
+      select format_id, watched_on, created_at from watches
+      union all select format_id, watched_on, created_at from tv_watches)
+    select f.id, f.name, f.kind,
+      (select count(*) from watches w where w.format_id = f.id)::int as uses,
+      max(u.watched_on)::text as "lastUsed"
+    from viewing_formats f left join used u on u.format_id = f.id
+    group by f.id
+    order by max(u.watched_on) desc nulls last, max(u.created_at) desc nulls last, lower(f.name)`);
   return r.rows;
 }
 

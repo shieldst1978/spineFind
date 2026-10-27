@@ -5,13 +5,14 @@ import { notFound } from "next/navigation";
 import { listViewingFormats } from "@/db/queries";
 import { showPage, type SeasonRow } from "@/db/tv";
 import { todayUk } from "@/lib/form-values";
+import { FormatOptions } from "@/components/format-options";
 import { WatchTabs } from "@/components/watch-tabs";
 import { logNextEpisode, logSeasonEpisodes } from "../actions";
 
 export const metadata: Metadata = { title: "TV show · SpineFind" };
 
 const field = "w-full min-w-0 rounded-lg border border-stone-300 bg-white px-2 py-2 text-base sm:text-sm dark:border-stone-700 dark:bg-stone-900";
-type Format = { id: number; name: string; kind: string };
+type Format = { id: number; name: string; kind: string; lastUsed?: string | null };
 
 export default async function TvShowPage({ params, searchParams }: PageProps<"/tv/[id]">) {
   const { id } = await params;
@@ -81,7 +82,7 @@ export default async function TvShowPage({ params, searchParams }: PageProps<"/t
 function FormatSelect({ formats, defaultValue }: { formats: Format[]; defaultValue?: number }) {
   return (
     <select name="format_id" defaultValue={defaultValue} className={field} aria-label="Watched on">
-      {formats.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+      <FormatOptions formats={formats} />
     </select>
   );
 }

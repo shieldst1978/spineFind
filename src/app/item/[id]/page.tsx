@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { FormatOptions } from "@/components/format-options";
 import { Spine } from "@/components/spine";
 import { filmInfo, getItem, listViewingFormats, watchesFor, type FilmInfo } from "@/db/queries";
 import { DISC_TO_MEDIA } from "@/db/seed-formats";
@@ -122,9 +123,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
               <label className="space-y-1">
                 <span className="text-sm text-stone-600 dark:text-stone-400">Watched on</span>
                 <select name="format_id" defaultValue={defaultFormatId} className={field}>
-                  {formats.map((f) => (
-                    <option key={f.id} value={f.id}>{f.name}</option>
-                  ))}
+                  <FormatOptions formats={formats} />
                 </select>
               </label>
             </div>
