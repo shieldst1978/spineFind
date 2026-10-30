@@ -278,6 +278,15 @@ Two separate things:
   history, the Seen before? page, Pick's "Seen it before"). Pick's "haven't watched" / "rewatch", the assistant and the
   Seen before? page go by this. A film page shows "You've seen the film … just not on this disc", with an undo.
 
+## Background photos
+
+The Watches pages sit on a photo of the cinema (`src/components/backdrop.tsx`, brought in by the Watches tabs): the
+portrait shot on phones, the landscape one on wider screens, under a wash of the page colour. Originals live in
+`images/` (git-ignored, never pushed); compressed WebP copies go in the private `spinefindmedia/backgrounds` container
+and are served by `/media/backgrounds/[name]`, fetched with the container app's managed identity (Storage Blob Data
+Reader) and behind sign-in like every page. Locally the route reads `images/web/`. A new photo means adding its name to
+the route's list and uploading it with `az storage blob upload --auth-mode login`.
+
 ## IMDb import
 
 **In the app:** Settings → IMDb takes a watch-history (or ratings) CSV and/or a watchlist CSV in one upload. The history

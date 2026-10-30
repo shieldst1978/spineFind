@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Backdrop } from "./backdrop";
 
 const TABS = [
   { key: "film-log", href: "/watches/new", label: "Log a film" },
@@ -7,9 +8,11 @@ const TABS = [
   { key: "tv", href: "/watches/tv", label: "TV log" },
 ] as const;
 
-/** The Watches section's sub-navigation: logging and the two logs, films and TV kept apart. */
+/** The Watches section's sub-navigation: logging and the two logs, films and TV kept apart. Brings the cinema backdrop. */
 export function WatchTabs({ active }: { active: (typeof TABS)[number]["key"] }) {
   return (
+    <>
+    <Backdrop photo="cinema" />
     <nav className="-mx-4 flex gap-1 overflow-x-auto px-4" aria-label="Watches">
       {TABS.map((t) => (
         <Link key={t.key} href={t.href} aria-current={active === t.key ? "page" : undefined}
@@ -18,5 +21,6 @@ export function WatchTabs({ active }: { active: (typeof TABS)[number]["key"] }) 
         </Link>
       ))}
     </nav>
+    </>
   );
 }
