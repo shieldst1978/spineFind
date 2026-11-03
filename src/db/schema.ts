@@ -113,7 +113,8 @@ export const watches = pgTable(
   },
   (t) => [
     index("watches_match_key_idx").on(t.matchKey),
-    index("watches_film_key_idx").on(t.filmKey),
+    // (film, date): a film's watches and its latest one straight from the index (Pick's "not seen in N years").
+    index("watches_film_key_watched_on_idx").on(t.filmKey, t.watchedOn),
     index("watches_watched_on_idx").on(t.watchedOn),
   ],
 );

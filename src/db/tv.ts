@@ -22,10 +22,13 @@ export async function ensureShow(tmdbTvId: number) {
     };
     await db.transaction(async (tx) => {
       await tx.insert(tvShows).values({ tmdbTvId, ...values }).onConflictDoUpdate({ target: tvShows.tmdbTvId, set: values });
-      for (const se of s.seasons) {
-        const v = { name: se.name, airDate: se.airDate, episodeCount: se.episodeCount, posterPath: se.posterPath };
-        await tx.insert(tvSeasons).values({ tmdbTvId, seasonNumber: se.seasonNumber, ...v })
-          .onConflictDoUpdate({ target: [tvSeasons.tmdbTvId, tvSeasons.seasonNumber], set: v });
+      if (s.seasons.length) {
+        await tx.insert(tvSeasons)
+          .values(s.seasons.map((se) => ({ tmdbTvId, seasonNumber: se.seasonNumber, name: se.name, airDate: se.airDate, episodeCount: se.episodeCount, posterPath: se.posterPath })))
+          .onConflictDoUpdate({
+            target: [tvSeasons.tmdbTvId, tvSeasons.seasonNumber],
+            set: { name: sql`excluded.name`, airDate: sql`excluded.air_date`, episodeCount: sql`excluded.episode_count`, posterPath: sql`excluded.poster_path` },
+          });
       }
     });
   } catch (e) {
@@ -43,10 +46,14 @@ export async function ensureSeason(tmdbTvId: number, seasonNumber: number) {
   try {
     const eps = await getTvSeason(tmdbTvId, seasonNumber);
     await db.transaction(async (tx) => {
-      for (const e of eps) {
-        const v = { name: e.name, airDate: e.airDate, runtime: e.runtime, tmdbEpisodeId: e.tmdbEpisodeId };
-        await tx.insert(tvEpisodes).values({ tmdbTvId, seasonNumber, episodeNumber: e.episodeNumber, ...v })
-          .onConflictDoUpdate({ target: [tvEpisodes.tmdbTvId, tvEpisodes.seasonNumber, tvEpisodes.episodeNumber], set: v });
+      // One statement for the whole season (some run to hundreds of episodes).
+      if (eps.length) {
+        await tx.insert(tvEpisodes)
+          .values(eps.map((e) => ({ tmdbTvId, seasonNumber, episodeNumber: e.episodeNumber, name: e.name, airDate: e.airDate, runtime: e.runtime, tmdbEpisodeId: e.tmdbEpisodeId })))
+          .onConflictDoUpdate({
+            target: [tvEpisodes.tmdbTvId, tvEpisodes.seasonNumber, tvEpisodes.episodeNumber],
+            set: { name: sql`excluded.name`, airDate: sql`excluded.air_date`, runtime: sql`excluded.runtime`, tmdbEpisodeId: sql`excluded.tmdb_episode_id` },
+          });
       }
       await tx.update(tvSeasons).set({ episodesFetchedAt: new Date(), episodeCount: eps.length })
         .where(and(eq(tvSeasons.tmdbTvId, tmdbTvId), eq(tvSeasons.seasonNumber, seasonNumber)));

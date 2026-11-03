@@ -33,8 +33,9 @@ const nextConfig: NextConfig = {
   // (scripts/start.mjs) imports drizzle's migrator and pg directly.
   serverExternalPackages: ["@electric-sql/pglite", "drizzle-orm", "pg"],
   images: {
-    // Film posters from TMDB.
-    remotePatterns: [{ protocol: "https", hostname: "image.tmdb.org", pathname: "/t/p/**" }],
+    // Film posters and service logos, straight from TMDB's CDN at the nearest size (no resizing here).
+    loader: "custom",
+    loaderFile: "./src/lib/tmdb-image-loader.ts",
   },
 };
 
