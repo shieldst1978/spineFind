@@ -46,6 +46,7 @@ export async function uploadImdb(form: FormData) {
       p.set("wl_kept", String(r.kept));
       p.set("wl_removed", String(r.removed));
       p.set("wl_seen", String(r.skippedSeen));
+      p.set("wl_dropped", String(r.skippedRemoved));
       p.set("wl_tv", String(r.skippedTv));
       p.set("wl_missing", String(r.notOnTmdb));
     }

@@ -7,13 +7,14 @@ import { findByImdbId, type Availability } from "@/lib/tmdb";
 
 export type SyncResult = {
   films: number; added: number; kept: number; removed: number;
-  skippedSeen: number; skippedTv: number; notOnTmdb: number; newTmdbIds: number[];
+  skippedSeen: number; skippedRemoved: number; skippedTv: number; notOnTmdb: number; newTmdbIds: number[];
 };
 
 /**
  * Brings the watchlist in line with an IMDb watchlist export: adds films that are new, drops films no
- * longer on IMDb, and leaves out TV and films already seen (watched or marked seen), so a film you've
- * watched never comes back. Returns the TMDB ids that still need their full record fetching.
+ * longer on IMDb, and leaves out TV, films already seen (watched or marked seen) and films you removed
+ * in the app, so neither comes back. Films added in the app stay whatever IMDb says.
+ * Returns the TMDB ids that still need their full record fetching.
  */
 export async function syncWatchlist(csv: string): Promise<SyncResult> {
   const rows = parseCsv(csv);
@@ -30,12 +31,14 @@ export async function syncWatchlist(csv: string): Promise<SyncResult> {
   }));
 
   const seen = new Set((await db.execute<{ tmdb_id: number }>(sql`select tmdb_id from assistant_films where watched and tmdb_id is not null`)).rows.map((r) => r.tmdb_id));
-  const result: SyncResult = { films: films.length, added: 0, kept: 0, removed: 0, skippedSeen: 0, skippedTv: rows.length - films.length, notOnTmdb: 0, newTmdbIds: [] };
+  const removedHere = new Set((await db.execute<{ tmdb_id: number }>(sql`select tmdb_id from watchlist_removed`)).rows.map((r) => r.tmdb_id));
+  const result: SyncResult = { films: films.length, added: 0, kept: 0, removed: 0, skippedSeen: 0, skippedRemoved: 0, skippedTv: rows.length - films.length, notOnTmdb: 0, newTmdbIds: [] };
   const wanted = new Map<number, { imdbId: string; title: string; year: number | null; addedOn: string | null }>();
   for (const r of films) {
     const id = known.get(r.Const) ?? listed.get(r.Const) ?? found.get(r.Const) ?? null;
     if (!id) { result.notOnTmdb++; continue; }
     if (seen.has(id)) { result.skippedSeen++; continue; }
+    if (removedHere.has(id)) { result.skippedRemoved++; continue; }
     wanted.set(id, { imdbId: r.Const, title: r.Title, year: Number(r.Year) || null, addedOn: /^\d{4}-\d{2}-\d{2}$/.test(r.Created ?? "") ? r.Created : null });
   }
 
@@ -68,6 +71,50 @@ export async function syncWatchlist(csv: string): Promise<SyncResult> {
 export async function removeFromWatchlist(filmKeys: (string | null | undefined)[]) {
   const keys = [...new Set(filmKeys.filter((k): k is string => !!k))];
   if (keys.length) await db.execute(sql`delete from watchlist where film_key in ${keys}`);
+}
+
+/** Adds a film in the app (source 'app'), forgetting any earlier removal. No-op if it's already listed. */
+export async function addToWatchlist(m: { tmdbId: number; title: string; year: number | null }) {
+  const key = `tmdb:${m.tmdbId}`;
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`delete from watchlist_removed where film_key = ${key}`);
+    await tx.execute(sql`
+      insert into watchlist (film_key, tmdb_id, title, release_year, added_on, source)
+      values (${key}, ${m.tmdbId}, ${m.title}, ${m.year}, current_date, 'app') on conflict (film_key) do nothing`);
+  });
+}
+
+/** Takes a film off because you no longer want it: remembered, so an IMDb upload won't re-add it. Returns its title. */
+export async function dropFromWatchlist(filmKey: string): Promise<string | null> {
+  const r = await db.execute<{ title: string }>(sql`
+    with d as (delete from watchlist where film_key = ${filmKey} returning *)
+    insert into watchlist_removed (film_key, tmdb_id, imdb_id, title, release_year, added_on, source)
+    select film_key, tmdb_id, imdb_id, title, release_year, added_on, source from d
+    on conflict (film_key) do update set tmdb_id = excluded.tmdb_id, imdb_id = excluded.imdb_id, title = excluded.title,
+      release_year = excluded.release_year, added_on = excluded.added_on, source = excluded.source, removed_at = now()
+    returning title`);
+  return r.rows[0]?.title ?? null;
+}
+
+/** Undoes a removal: the film goes back exactly as it was (same source and date added). */
+export async function restoreToWatchlist(filmKey: string) {
+  await db.execute(sql`
+    with r as (delete from watchlist_removed where film_key = ${filmKey} returning *)
+    insert into watchlist (film_key, tmdb_id, imdb_id, title, release_year, added_on, source)
+    select film_key, tmdb_id, imdb_id, title, release_year, added_on, source from r
+    on conflict (film_key) do nothing`);
+}
+
+/** For TMDB search results on the watchlist page: which are already listed, seen, or owned. */
+export async function watchlistStatus(tmdbIds: number[]) {
+  const ids = tmdbIds.length ? tmdbIds : [0];
+  const r = await db.execute<{ tmdb_id: number; listed: boolean; seen: boolean; owned: boolean }>(sql`
+    select x.id as tmdb_id,
+      exists (select 1 from watchlist w where w.tmdb_id = x.id) as listed,
+      exists (select 1 from assistant_films a where a.tmdb_id = x.id and a.watched) as seen,
+      exists (select 1 from items i join products p on p.id = i.product_id where i.tmdb_id = x.id and p.location <> 'gone') as owned
+    from unnest(${sql.param(ids)}::int[]) as x(id)`);
+  return new Map(r.rows.map((s) => [s.tmdb_id, s]));
 }
 
 export type WatchlistEntry = {

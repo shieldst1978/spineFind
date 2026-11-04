@@ -315,8 +315,9 @@ export const assistantMessages = pgTable(
 );
 
 /**
- * Films Tim wants to watch. Synced from his IMDb watchlist (source 'imdb'; an upload adds new films
- * and drops ones gone from IMDb). A film leaves the list once it's watched or marked seen.
+ * Films Tim wants to watch: from his IMDb watchlist (source 'imdb'; an upload adds new films and drops
+ * ones gone from IMDb) or added in the app (source 'app', never dropped by an upload). A film leaves the
+ * list once it's watched or marked seen, or when he removes it (see watchlistRemoved).
  */
 export const watchlist = pgTable(
   "watchlist",
@@ -333,6 +334,21 @@ export const watchlist = pgTable(
   },
   (t) => [index("watchlist_tmdb_idx").on(t.tmdbId)],
 );
+
+/**
+ * Films you took off the watchlist in the app (not by watching them), kept whole so the removal can be
+ * undone and so a later IMDb upload doesn't put them back. Adding a film again in the app clears it.
+ */
+export const watchlistRemoved = pgTable("watchlist_removed", {
+  filmKey: text("film_key").primaryKey(),
+  tmdbId: integer("tmdb_id").notNull(),
+  imdbId: text("imdb_id"),
+  title: text("title").notNull(),
+  releaseYear: integer("release_year"),
+  addedOn: date("added_on"),
+  source: text("source").notNull(),
+  removedAt: timestamp("removed_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // ---- TV: entirely separate from films. The episode is the unit; seasons and series are worked out from episodes.
 

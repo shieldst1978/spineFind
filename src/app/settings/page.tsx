@@ -41,7 +41,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           </p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-stone-600 dark:text-stone-400">
             <li><strong className="font-medium">Watch history</strong> (or your ratings): films you&apos;ve seen are marked seen, not your discs. TV goes to your TV: a series marked on IMDb counts as every episode seen.</li>
-            <li><strong className="font-medium">Watchlist</strong>: new films are added, ones removed on IMDb come off, and films you&apos;ve seen are left out.
+            <li><strong className="font-medium">Watchlist</strong>: new films are added, ones removed on IMDb come off, and films you&apos;ve seen are left out. Films you add or remove in SpineFind stay that way.
               {onWatchlist > 0 && <> <Link href="/watchlist" className="underline">{onWatchlist} films on your watchlist</Link>.</>}</li>
           </ul>
         </div>
@@ -58,6 +58,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               <p>
                 Watchlist: {n("wl_added")} added, {n("wl_kept")} already there, {n("wl_removed")} removed.
                 {n("wl_seen") > 0 && ` ${n("wl_seen")} left out as already seen.`}
+                {n("wl_dropped") > 0 && ` ${n("wl_dropped")} left out because you removed them in SpineFind.`}
                 {n("wl_tv") > 0 && ` ${n("wl_tv")} TV titles skipped.`}
                 {n("wl_missing") > 0 && ` ${n("wl_missing")} not found on TMDB.`}
               </p>

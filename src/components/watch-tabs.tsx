@@ -6,6 +6,7 @@ const TABS = [
   { key: "tv-log", href: "/tv", label: "Log TV" },
   { key: "films", href: "/watches", label: "Film log" },
   { key: "tv", href: "/watches/tv", label: "TV log" },
+  { key: "watchlist", href: "/watchlist", label: "Watchlist" },
 ] as const;
 
 /** The Watches section's sub-navigation: logging and the two logs, films and TV kept apart. Brings the cinema backdrop. */
