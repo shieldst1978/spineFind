@@ -5,7 +5,7 @@ import { searchShelf, shelfTotals, type Location, type MediaFormat, type ShelfFi
 import { COLOUR_NAMES } from "@/lib/colours";
 
 const FORMATS: MediaFormat[] = ["4K UltraHD", "Blu Ray", "DVD", "HD DVD"];
-const LOCATIONS: (Location | "all")[] = ["shelf", "loft", "gone", "all"];
+const LOCATIONS: (Location | "all")[] = ["shelf", "plex", "loft", "gone", "all"];
 
 function one(v: string | string[] | undefined): string {
   return (Array.isArray(v) ? v[0] : v) ?? "";
@@ -36,6 +36,7 @@ export default async function ShelfPage({ searchParams }: PageProps<"/shelf">) {
           <h1 className="text-2xl font-semibold tracking-tight">Shelf</h1>
           <p className="text-sm text-stone-600 dark:text-stone-400">
             {totals.products} boxes · {totals.films} films · {totals.watched} watched
+            {totals.plex > 0 && <> · <Link href="/shelf?location=plex" className="underline">{totals.plex} on Plex</Link></>}
           </p>
         </div>
         <Link href="/add" className="shrink-0 rounded-lg bg-stone-900 px-3 py-2 text-sm font-medium text-white dark:bg-stone-100 dark:text-stone-900">
@@ -56,7 +57,9 @@ export default async function ShelfPage({ searchParams }: PageProps<"/shelf">) {
       />
 
       <p className="mt-6 mb-3 text-sm text-stone-600 dark:text-stone-400" aria-live="polite">
-        {filtering ? `${total} ${total === 1 ? "box matches" : "boxes match"}` : `${total} boxes on the shelf`}
+        {location === "plex" && !q && !colours.length && !format && !watched
+          ? `${total} films on Plex`
+          : filtering ? `${total} ${total === 1 ? "box matches" : "boxes match"}` : `${total} boxes on the shelf`}
         {total > products.length && ` (showing the first ${products.length})`}
       </p>
 
@@ -74,16 +77,21 @@ export default async function ShelfPage({ searchParams }: PageProps<"/shelf">) {
                   <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
                     <h2 className="font-medium">{p.title}</h2>
                     <span className="text-xs text-stone-500">{p.spineColours.join(" / ")}</span>
-                    {p.location !== "shelf" && (
+                    {p.location === "plex" ? (
+                      <span className="rounded bg-sky-100 px-1.5 text-xs text-sky-900 dark:bg-sky-900/40 dark:text-sky-200">Plex</span>
+                    ) : p.location !== "shelf" && (
                       <span className="rounded bg-amber-100 px-1.5 text-xs text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
                         {p.location === "loft" ? "Loft" : "Gone"}
                       </span>
                     )}
                   </div>
-                  <Link href={`/box/${p.id}`} className="-my-1 shrink-0 rounded-md px-2 py-1.5 text-xs text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800"
-                    aria-label={`Edit ${p.title}`}>
-                    Edit
-                  </Link>
+                  {/* Plex films come from the Plex library (scripts/plex-sync.ts): change them in Plex, not here. */}
+                  {p.location !== "plex" && (
+                    <Link href={`/box/${p.id}`} className="-my-1 shrink-0 rounded-md px-2 py-1.5 text-xs text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800"
+                      aria-label={`Edit ${p.title}`}>
+                      Edit
+                    </Link>
+                  )}
                 </div>
                 <ul className={`mt-1 text-sm ${p.items.length > 1 ? "divide-y divide-stone-100 dark:divide-stone-800" : ""}`}>
                   {p.items.map((it) => (
@@ -93,7 +101,8 @@ export default async function ShelfPage({ searchParams }: PageProps<"/shelf">) {
                           {it.title}
                           {it.year && <span className="text-stone-500"> ({it.year})</span>}
                         </span>
-                        <span className="shrink-0 text-xs text-stone-500">{it.format}</span>
+                        {it.onPlex && <span className="shrink-0 text-xs text-sky-700 dark:text-sky-400">+ Plex</span>}
+                        <span className="shrink-0 text-xs text-stone-500">{p.location === "plex" ? (p.quality ?? "Plex") : it.format}</span>
                         <WatchedMark watched={it.watched} />
                       </Link>
                     </li>

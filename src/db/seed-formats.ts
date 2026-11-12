@@ -50,10 +50,11 @@ export const SEED_FORMATS: { name: string; kind: Kind; aliases?: string[] }[] = 
   { name: "Plane", kind: "other" },
 ];
 
-/** Disc watch format -> the catalogue format of the copy it would have been played from. */
-export const DISC_TO_MEDIA: Record<string, "4K UltraHD" | "Blu Ray" | "DVD" | "HD DVD"> = {
+/** Watch format -> the catalogue format of the copy it would have been played from (discs, and Plex rips). */
+export const DISC_TO_MEDIA: Record<string, "4K UltraHD" | "Blu Ray" | "DVD" | "HD DVD" | "Plex"> = {
   "4K Blu Ray": "4K UltraHD",
   "Blu Ray": "Blu Ray",
   DVD: "DVD",
   "HD DVD": "HD DVD",
+  Plex: "Plex",
 };

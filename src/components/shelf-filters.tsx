@@ -62,7 +62,7 @@ export function ShelfFilters({ q, colours, format, location, watched }: Props) {
 
       <div className="grid grid-cols-3 gap-2 text-sm">
         <Select name="format" value={format} label="Format" options={[["", "Any format"], ["4K UltraHD", "4K UltraHD"], ["Blu Ray", "Blu Ray"], ["DVD", "DVD"], ["HD DVD", "HD DVD"]]} />
-        <Select name="location" value={location} label="Where" options={[["shelf", "On the shelf"], ["loft", "In the loft"], ["gone", "Gone"], ["all", "Anywhere"]]} />
+        <Select name="location" value={location} label="Where" options={[["shelf", "On the shelf"], ["plex", "On Plex"], ["loft", "In the loft"], ["gone", "Gone"], ["all", "Anywhere"]]} />
         <Select name="watched" value={watched} label="Watched" options={[["", "Watched or not"], ["unwatched", "Not watched"], ["watched", "Watched"]]} />
       </div>
 

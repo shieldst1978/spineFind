@@ -74,9 +74,9 @@ async function localSuggestions(q: string, match?: SQL): Promise<FilmSuggestion[
     with mine as (
       select title, release_year, match_key, film_key, tmdb_id, false as owned, null::text as format, null::int as pref from watches
       union all
-      -- Copies you still have (not "gone"); pref ranks shelf before loft, then 4K > Blu-ray > HD DVD > DVD.
+      -- Copies you still have (not "gone"); pref ranks shelf, then Plex, then loft, then 4K > Blu-ray > HD DVD > DVD.
       select i.title, i.release_year, i.match_key, i.film_key, i.tmdb_id, true, i.format::text,
-        (case p.location when 'shelf' then 0 else 10 end)
+        (case p.location when 'shelf' then 0 when 'plex' then 5 else 10 end)
           + (case i.format when '4K UltraHD' then 0 when 'Blu Ray' then 1 when 'HD DVD' then 2 else 3 end)
       from items i join products p on p.id = i.product_id
       where i.item_type = 'film' and p.location <> 'gone'

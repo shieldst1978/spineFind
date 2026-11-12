@@ -12,7 +12,7 @@ const HOUSE_RULES = `
 - In ages: not watched for more than five years.
 - Like: Tim doesn't rate films. "What I like" means what he watches most, judged from the watch log.
 - Year: the release year as Tim entered it, usually the UK release year.
-- Recommend from where: either "on the shelf" (owned, on the shelf, not in the loft) or "anything" (including films he doesn't own, e.g. on his streaming services). If he doesn't say which, ask before recommending.
+- Recommend from where: either "on the shelf" (owned, on the shelf or on Plex, not in the loft) or "anything" (including films he doesn't own, e.g. on his streaming services). If he doesn't say which, ask before recommending.
 - Underrated / underwatched: a high TMDB score with few votes. As a rough guide, vote_average 7 or more with vote_count under 1,000.
 - Oscar nominated: films nominated for an Academy Award in a given year (any category unless he names one, e.g. Best Picture).
   There's no awards data in the database: search the web for that ceremony's nominees (say which year you used; if he
@@ -27,7 +27,7 @@ The database is PostgreSQL. Query it with query_database (read-only; one SELECT 
 
 assistant_films: one row per film Tim owns, has logged, or marked seen. Identity is film_key.
   film_key, title (Tim's title: as on the spine or as he logged it), release_year, tmdb_id (null if not linked to TMDB),
-  owned (bool), owned_where ('shelf' or 'loft'; null if not owned), owned_formats (text[]: '4K UltraHD', 'Blu Ray', 'DVD', 'HD DVD'),
+  owned (bool), owned_where ('shelf', 'plex' or 'loft'; null if not owned; 'plex' = a digital copy in his Plex library on his PC, ready to watch, no spine; when a film is in more than one place this is the handiest), owned_formats (text[]: '4K UltraHD', 'Blu Ray', 'DVD', 'HD DVD', 'Plex'),
   box_title (the box it's in, e.g. a box set's name), spine_colours (e.g. 'Black / Gold', main colour first),
   times_watched (logged watches, any format), disc_watches, first_watched, last_watched (dates),
   watched (bool: the film seen at all, per the house rules), seen_before_no_date (bool: seen but with no logged watch, e.g. from IMDb),

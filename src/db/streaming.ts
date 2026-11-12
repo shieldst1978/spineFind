@@ -1,6 +1,7 @@
 import "server-only";
 import { asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db } from ".";
+import { OWNED_ORDER } from "./owned";
 import { filmAvailability, seenFilms, streamingServices } from "./schema";
 import { discoverOnServices, getUkAvailability, listUkProviders, tmdbEnabled, type Availability, type TmdbSearchResult } from "@/lib/tmdb";
 
@@ -215,7 +216,7 @@ export async function pickOnServices(c: ServiceCriteria, count = 4): Promise<{ t
     left join lateral (select w.title, w.release_year from watches w where w.tmdb_id = f.tmdb_id order by w.watched_on desc limit 1) lw on true
     left join lateral (
       select i.id, i.title, i.release_year, p.location from items i join products p on p.id = i.product_id
-      where i.tmdb_id = f.tmdb_id and p.location <> 'gone' order by p.location = 'shelf' desc limit 1) own on true`)).rows.map((r) => [r.tmdb_id, r]));
+      where i.tmdb_id = f.tmdb_id and p.location <> 'gone' order by ${OWNED_ORDER} limit 1) own on true`)).rows.map((r) => [r.tmdb_id, r]));
 
   const picks = await Promise.all(ids.map(async (id): Promise<ServicePick> => {
     const m = mine.get(id);

@@ -17,9 +17,10 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const location = pgEnum("location", ["shelf", "loft", "gone"]);
+/** 'plex': a film in the Plex library on Tim's PC, kept in step by scripts/plex-sync.ts (no spine). */
+export const location = pgEnum("location", ["shelf", "loft", "gone", "plex"]);
 export const itemType = pgEnum("item_type", ["film", "tv_season", "episode"]);
-export const mediaFormat = pgEnum("media_format", ["4K UltraHD", "Blu Ray", "DVD", "HD DVD"]);
+export const mediaFormat = pgEnum("media_format", ["4K UltraHD", "Blu Ray", "DVD", "HD DVD", "Plex"]);
 export const formatKind = pgEnum("format_kind", ["disc", "cinema", "streaming", "tv", "download", "other"]);
 export const flagKind = pgEnum("flag_kind", [
   "format_mismatch",
@@ -44,9 +45,11 @@ export const products = pgTable(
     spineColours: text("spine_colours").array().notNull(),
     location: location("location").notNull().default("shelf"),
     notes: text("notes"),
+    /** For a Plex film (location 'plex'): its Plex guid, e.g. plex://movie/5d77…, which the sync matches on. */
+    plexGuid: text("plex_guid"),
     ...timestamps,
   },
-  (t) => [index("products_title_idx").on(t.title)],
+  (t) => [index("products_title_idx").on(t.title), uniqueIndex("products_plex_guid_idx").on(t.plexGuid)],
 );
 
 /**
@@ -230,7 +233,9 @@ export const reviewFlags = pgTable("review_flags", {
 
 /**
  * Watched status per item. Films count as watched if flagged before logging or
- * if a watch of the same title + year was on a disc format. TV items are null.
+ * if a watch of the same film was on this kind of copy: a disc format for a disc,
+ * the "Plex" viewing format for a Plex film. TV items are null. (The disc_* names
+ * predate Plex: read them as "watches of this copy".)
  */
 export const itemWatchStatus = pgView("item_watch_status", {
   itemId: uuid("item_id").notNull(),
@@ -249,7 +254,8 @@ export const itemWatchStatus = pgView("item_watch_status", {
   from items i
   left join watches w
     on w.film_key = i.film_key
-    and w.format_id in (select id from viewing_formats where kind = 'disc')
+    and w.format_id in (select id from viewing_formats
+      where case when i.format::text = 'Plex' then lower(name) = 'plex' else kind = 'disc' end)
   group by i.id
 `);
 

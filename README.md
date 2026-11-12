@@ -300,6 +300,21 @@ watch-history CSV (`imdb_exports/`, git-ignored), skips TV, matches each film to
 logged watch as seen (`source = imdb`). It never marks discs watched, keeps your own titles where SpineFind has the film,
 and fetches full TMDB records for films new to SpineFind. Re-runnable.
 
+## Plex
+
+The film library of the Plex Media Server on Tim's PC counts as part of the collection, without spines. Each Plex film is
+a box with `location = 'plex'`, no spine colours, one item with format `Plex`, and `products.plex_guid` (Plex's own id);
+`products.notes` holds the picture quality ("SD", "720p"). They show on Shelf under **On Plex**, in Pick (a film also on
+the shelf counts once, as the disc), as "On Plex" on the watchlist and in Ask, and a disc whose film is also on Plex is
+marked "+ Plex". A watch logged in the **Plex** format marks a Plex copy watched, as a disc format marks a disc.
+
+SpineFind runs in Azure and can't see the PC, so the PC pushes: `scripts/plex-sync.ts` (runner
+`scripts/ops/run-plex-sync.ps1`, dev by default, `-Production` for live) reads Plex's local API, adds new films, updates
+changed ones, removes boxes for films gone from Plex (watches hang off the film, so nothing is lost), and fetches TMDB
+records for films new to SpineFind. Films are linked by Plex's TMDB id, else its IMDb id, else title + year. The Plex token
+is read from Plex Media Server's registry entry and never stored. A Windows scheduled task, **SpineFind Plex sync**, runs
+it nightly against production and logs to `reports/plex-sync.log`. Plex boxes aren't edited in the app: change Plex.
+
 ## TMDB enrichment
 
 `scripts/enrich.ts` matches every film as entered (one per `match_key`) to TMDB, stores the full record for each match, and links items and watches to it. Films added later are enriched when they're saved.

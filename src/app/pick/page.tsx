@@ -11,7 +11,7 @@ import { ServicesPick } from "./services-pick";
 
 export const metadata: Metadata = { title: "Pick a film · SpineFind" };
 
-const FORMATS: MediaFormat[] = ["4K UltraHD", "Blu Ray", "DVD", "HD DVD"];
+const FORMATS: MediaFormat[] = ["4K UltraHD", "Blu Ray", "DVD", "HD DVD", "Plex"];
 /** Decades offered when picking from your services (newest first). */
 const SERVICE_DECADES = [2020, 2010, 2000, 1990, 1980, 1970, 1960, 1950, 1940, 1930, 1920];
 const randomServiceDecade = () => SERVICE_DECADES[Math.floor(Math.random() * SERVICE_DECADES.length)];
@@ -163,11 +163,18 @@ export default async function PickPage({ searchParams }: PageProps<"/pick">) {
             </div>
             <div className="flex items-center gap-3 border-t border-stone-200 bg-stone-50 px-4 py-3 dark:border-stone-800 dark:bg-stone-950">
               <Spine colours={pick.spineColours} className="h-10 !w-5" />
-              <p className="min-w-0 flex-1 text-sm">
-                Look for {/^[AEIOU]/.test(pick.spineColours[0] ?? "") ? "an" : "a"} <strong>{pick.spineColours.join(" / ")}</strong> spine
-                {pick.box !== pick.title && <> labelled <em>{pick.box}</em></>}
-                <span className="text-stone-500"> · {pick.format}</span>
-              </p>
+              {pick.location === "plex" ? (
+                <p className="min-w-0 flex-1 text-sm">
+                  It&apos;s on <strong>Plex</strong>
+                  {pick.quality && <span className="text-stone-500"> · {pick.quality}</span>}
+                </p>
+              ) : (
+                <p className="min-w-0 flex-1 text-sm">
+                  Look for {/^[AEIOU]/.test(pick.spineColours[0] ?? "") ? "an" : "a"} <strong>{pick.spineColours.join(" / ")}</strong> spine
+                  {pick.box !== pick.title && <> labelled <em>{pick.box}</em></>}
+                  <span className="text-stone-500"> · {pick.format}</span>
+                </p>
+              )}
             </div>
           </article>
 
@@ -203,7 +210,7 @@ export default async function PickPage({ searchParams }: PageProps<"/pick">) {
                         {r.title}
                         {r.year && <span className="text-stone-500"> ({r.year})</span>}
                       </span>
-                      <span className="shrink-0 text-xs text-stone-500">{r.format}</span>
+                      <span className="shrink-0 text-xs text-stone-500">{r.location === "plex" ? "Plex" : r.format}</span>
                     </Link>
                   </li>
                 ))}

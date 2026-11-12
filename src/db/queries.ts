@@ -1,6 +1,7 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from ".";
+import { OWNED_ORDER } from "./owned";
 import { location as locationEnum, mediaFormat } from "./schema";
 
 export type Location = (typeof locationEnum.enumValues)[number];
@@ -22,6 +23,8 @@ export type ShelfItem = {
   format: MediaFormat;
   type: "film" | "tv_season" | "episode";
   watched: boolean | null;
+  /** A disc whose film is also in the Plex library. */
+  onPlex: boolean;
 };
 
 export type ShelfProduct = {
@@ -29,8 +32,11 @@ export type ShelfProduct = {
   title: string;
   spineColours: string[];
   location: Location;
+  /** For a Plex film: the picture quality, e.g. "SD", "720p". */
+  quality: string | null;
   items: ShelfItem[];
 };
+
 
 const LIMIT = 150;
 
@@ -82,13 +88,17 @@ export async function searchShelf(f: ShelfFilters): Promise<{ products: ShelfPro
     title: string;
     spine_colours: string[];
     location: Location;
+    quality: string | null;
     items: ShelfItem[];
     total: number;
   }>(sql`
-    select p.id, p.title, p.spine_colours, p.location,
+    select p.id, p.title, p.spine_colours, p.location, case when p.location = 'plex' then p.notes end as quality,
       (select json_agg(json_build_object(
           'id', i.id, 'number', i.legacy_number, 'title', i.title, 'year', i.release_year,
-          'format', i.format, 'type', i.item_type, 'watched', s.watched) order by i.position)
+          'format', i.format, 'type', i.item_type, 'watched', s.watched,
+          'onPlex', p.location <> 'plex' and i.item_type = 'film' and exists (
+            select 1 from items pi join products pp on pp.id = pi.product_id where pp.location = 'plex' and pi.film_key = i.film_key)
+        ) order by i.position)
        from items i join item_watch_status s on s.item_id = i.id
        where i.product_id = p.id) as items,
       count(*) over ()::int as total
@@ -104,6 +114,7 @@ export async function searchShelf(f: ShelfFilters): Promise<{ products: ShelfPro
       title: r.title,
       spineColours: r.spine_colours,
       location: r.location,
+      quality: r.quality,
       items: r.items ?? [],
     })),
   };
@@ -121,17 +132,25 @@ export type ItemDetail = {
   filmKey: string;
   tmdbId: number | null;
   watched: boolean | null;
-  box: { id: string; title: string; spineColours: string[]; location: Location };
+  box: { id: string; title: string; spineColours: string[]; location: Location; quality: string | null };
+  /** Your other copies of the same film (e.g. the disc in the loft and the Plex rip), best placed first. */
+  otherCopies: { id: string; location: Location; format: MediaFormat }[];
 };
 
 export async function getItem(id: string): Promise<ItemDetail | null> {
   const r = await db.execute<{
     id: string; title: string; release_year: number | null; item_type: ItemDetail["itemType"];
     format: MediaFormat; watched_before_logging: boolean; film_key: string; tmdb_id: number | null; watched: boolean | null; seen_source: string | null;
-    box_id: string; box_title: string; spine_colours: string[]; location: Location;
+    box_id: string; box_title: string; spine_colours: string[]; location: Location; quality: string | null;
+    other_copies: ItemDetail["otherCopies"] | null;
   }>(sql`
     select i.id, i.title, i.release_year, i.item_type, i.format, i.watched_before_logging, i.film_key, i.tmdb_id,
       s.watched, p.id as box_id, p.title as box_title, p.spine_colours, p.location,
+      case when p.location = 'plex' then p.notes end as quality,
+      (select json_agg(json_build_object('id', o.id, 'location', o.location, 'format', o.format) order by o.ord)
+       from (select oi.id, p.location, oi.format, ${OWNED_ORDER} as ord
+             from items oi join products p on p.id = oi.product_id
+             where oi.film_key = i.film_key and oi.id <> i.id and oi.item_type = 'film' and p.location <> 'gone') o) as other_copies,
       (select sf.source from seen_films sf where sf.film_key = i.film_key) as seen_source
     from items i
     join products p on p.id = i.product_id
@@ -150,7 +169,8 @@ export async function getItem(id: string): Promise<ItemDetail | null> {
     filmKey: row.film_key,
     tmdbId: row.tmdb_id,
     watched: row.watched,
-    box: { id: row.box_id, title: row.box_title, spineColours: row.spine_colours, location: row.location },
+    box: { id: row.box_id, title: row.box_title, spineColours: row.spine_colours, location: row.location, quality: row.quality },
+    otherCopies: row.other_copies ?? [],
   };
 }
 
@@ -472,13 +492,19 @@ export type PickCandidate = {
   format: MediaFormat;
   box: string;
   spineColours: string[];
+  /** 'shelf', or 'plex' for a film in the Plex library (no spine to look for). */
+  location: Location;
+  /** A Plex film's picture quality, e.g. "SD". */
+  quality: string | null;
   watched: boolean;
   lastWatched: string | null;
   times: number;
 };
 
 function pickWhere(c: Omit<PickCriteria, "decade" | "exclude">): SQL[] {
-  const where: SQL[] = [sql`i.item_type = 'film'`, sql`p.location = 'shelf'`];
+  // The shelf and Plex; a Plex copy of a film that's also on the shelf only counts once (as the disc).
+  const where: SQL[] = [sql`i.item_type = 'film'`, sql`p.location in ('shelf', 'plex')`, sql`not (p.location = 'plex' and exists (
+    select 1 from items di join products dp on dp.id = di.product_id where dp.location = 'shelf' and di.film_key = i.film_key))`];
   // Seen the film at all: this disc, a watch in any format, or marked seen (IMDb, Seen before?, Pick).
   const filmSeen = sql`(s.watched or exists (select 1 from watches fw where fw.film_key = i.film_key)
     or exists (select 1 from seen_films sf where sf.film_key = i.film_key))`;
@@ -532,10 +558,11 @@ export async function pickFilms(c: PickCriteria, count = 4) {
 
   const rows = await db.execute<{
     id: string; title: string; year: number | null; format: MediaFormat; box: string; spine_colours: string[];
-    watched: boolean; last_watched: string | null; times: number; total: number;
+    location: Location; quality: string | null; watched: boolean; last_watched: string | null; times: number; total: number;
   }>(sql`
     with cand as (
       select i.id, i.title, i.release_year as year, i.format, p.title as box, p.spine_colours, s.watched,
+        p.location, case when p.location = 'plex' then p.notes end as quality,
         (select max(w.watched_on) from watches w where w.film_key = i.film_key)::text as last_watched,
         (select count(*) from watches w where w.film_key = i.film_key)::int as times
       from items i
@@ -559,6 +586,8 @@ export async function pickFilms(c: PickCriteria, count = 4) {
       format: r.format,
       box: r.box,
       spineColours: r.spine_colours,
+      location: r.location,
+      quality: r.quality,
       watched: r.watched,
       lastWatched: r.last_watched,
       times: r.times,
@@ -643,8 +672,9 @@ export async function listDecisions(page = 1, q = "") {
 }
 
 export async function shelfTotals() {
-  const r = await db.execute<{ products: number; films: number; watched: number }>(sql`
+  const r = await db.execute<{ products: number; films: number; watched: number; plex: number }>(sql`
     select
+      (select count(*) from products where location = 'plex')::int as plex,
       (select count(*) from products where location = 'shelf')::int as products,
       (select count(*) from items i join products p on p.id = i.product_id
         where p.location = 'shelf' and i.item_type = 'film')::int as films,

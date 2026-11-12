@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from ".";
+import { OWNED_ORDER } from "./owned";
 import { availabilityFor, subscribedIds, type ServicePick } from "./streaming";
 import { IMDB_FILM_TYPES, parseCsv } from "@/lib/csv";
 import { findByImdbId, type Availability } from "@/lib/tmdb";
@@ -143,7 +144,7 @@ export async function listWatchlist(): Promise<WatchlistEntry[]> {
     left join lateral (
       select i.id, i.title, i.release_year, p.location::text as location, p.title as box, array_to_string(p.spine_colours, ' / ') as spine
       from items i join products p on p.id = i.product_id
-      where i.tmdb_id = w.tmdb_id and p.location <> 'gone' order by p.location = 'shelf' desc limit 1) own on true
+      where i.tmdb_id = w.tmdb_id and p.location <> 'gone' order by ${OWNED_ORDER} limit 1) own on true
     order by w.added_on desc nulls last, lower(w.title)`);
   return r.rows.map((x) => {
     const o = x.offers;
@@ -171,7 +172,7 @@ export async function pickFromWatchlist(c: { decade?: number; exclude?: number[]
   const all = await listWatchlist();
   const exclude = new Set(c.exclude ?? []);
   let pool = all.filter((e) => !exclude.has(e.tmdbId) && (c.decade === undefined || (e.year !== null && Math.floor(e.year / 10) * 10 === c.decade)));
-  const onShelf = (e: WatchlistEntry) => e.owned?.where === "shelf";
+  const onShelf = (e: WatchlistEntry) => e.owned?.where === "shelf" || e.owned?.where === "plex";
   const streaming = (e: WatchlistEntry) => (e.services?.length ?? 0) > 0;
   const where = c.where ?? "either";
   pool = pool.filter((e) => (where === "shelf" ? onShelf(e) : where === "services" ? streaming(e) && !onShelf(e) : onShelf(e) || streaming(e)));

@@ -62,14 +62,14 @@ export async function ServicesPick({ criteria, href, source = "services", watchl
             <p className="text-sm">{watchedLine(pick)}</p>
             {pick.owned && (
               <p className="text-xs text-stone-500">
-                You own it ({pick.owned.location === "loft" ? "in the loft" : "on the shelf"}) · <Link href={`/item/${pick.owned.itemId}`} className="underline">film page</Link>
+                You own it ({pick.owned.location === "loft" ? "in the loft" : pick.owned.location === "plex" ? "on Plex" : "on the shelf"}) · <Link href={`/item/${pick.owned.itemId}`} className="underline">film page</Link>
               </p>
             )}
           </div>
         </div>
         <div className="border-t border-stone-200 bg-stone-50 px-4 py-3 text-sm dark:border-stone-800 dark:bg-stone-950">
           {pick.owned ? (
-            <>On your shelf: <Link href={`/item/${pick.owned.itemId}`} className="underline">go to your copy</Link>{pick.owned.location === "loft" ? " (in the loft)" : ""}</>
+            <>{pick.owned.location === "plex" ? "On Plex" : "On your shelf"}: <Link href={`/item/${pick.owned.itemId}`} className="underline">go to your copy</Link>{pick.owned.location === "loft" ? " (in the loft)" : ""}</>
           ) : pick.services.length ? (
             <>On <strong>{pick.services.join(", ")}</strong></>
           ) : fromWatchlist ? (

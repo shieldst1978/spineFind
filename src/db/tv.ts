@@ -73,6 +73,8 @@ export type ShowPage = {
   /** The next episode to watch: after the most recently watched one (by date logged), else the first. */
   next: { seasonNumber: number; episodeNumber: number; name: string | null } | null;
   lastFormatId: number | null;
+  /** For a show with no watches yet: the format of your latest TV watch on any show (not cinema or disc). */
+  lastTvFormatId: number | null;
   watchedEpisodes: number;
   totalEpisodes: number;
 };
@@ -132,7 +134,12 @@ export async function showPage(tmdbTvId: number, openSeason?: number): Promise<S
   }
   const totalEpisodes = rows.filter((s) => s.seasonNumber > 0).reduce((a, s) => a + s.episodeCount, 0);
   const watchedEpisodes = rows.filter((s) => s.seasonNumber > 0).reduce((a, s) => a + s.watched, 0);
-  return { show, seasons: rows, next, lastFormatId: last?.format_id ?? null, watchedEpisodes, totalEpisodes };
+  // A show not started yet: the format of your latest TV watch on any show (never cinema or a disc), so the
+  // form doesn't inherit whatever film you logged last.
+  const lastTvFormatId = last ? null : ((await db.execute<{ format_id: number }>(sql`
+    select w.format_id from tv_watches w join viewing_formats f on f.id = w.format_id
+    where f.kind not in ('cinema', 'disc') order by w.watched_on desc, w.created_at desc limit 1`)).rows[0]?.format_id ?? null);
+  return { show, seasons: rows, next, lastFormatId: last?.format_id ?? null, lastTvFormatId, watchedEpisodes, totalEpisodes };
 }
 
 /** Logs episodes of a show (one row each). For a whole season, pass all its episode numbers. */
@@ -167,30 +174,38 @@ export async function seenShows() {
   return r.rows;
 }
 
-export type TvLogRow = { id: string; tmdbTvId: number; show: string; season: number; episode: number; episodeName: string | null; watchedOn: string; format: string; fromMemory: boolean; nth: number };
+export type TvLogRow = { id: string; tmdbTvId: number; show: string; season: number; episode: number; episodeName: string | null; watchedOn: string; format: string; formatId: number; fromMemory: boolean; nth: number };
 export const TV_LOG_PAGE = 100;
 
 /** The TV watch log, newest first, with rewatch numbering per episode. */
 export async function tvLog(page = 1): Promise<{ rows: TvLogRow[]; total: number }> {
   const r = await db.execute<{
     id: string; tmdb_tv_id: number; show: string; season_number: number; episode_number: number; episode_name: string | null;
-    watched_on: string; format: string; from_memory: boolean; nth: number; total: number;
+    watched_on: string; format: string; format_id: number; from_memory: boolean; nth: number; total: number;
   }>(sql`
     with log as (
       select w.*, row_number() over (partition by w.tmdb_tv_id, w.season_number, w.episode_number order by w.watched_on, w.created_at)::int as nth
       from tv_watches w)
     select l.id, l.tmdb_tv_id, s.name as show, l.season_number, l.episode_number, e.name as episode_name, l.watched_on::text as watched_on,
-      f.name as format, l.from_memory, l.nth, count(*) over ()::int as total
+      f.name as format, l.format_id, l.from_memory, l.nth, count(*) over ()::int as total
     from log l join tv_shows s on s.tmdb_tv_id = l.tmdb_tv_id join viewing_formats f on f.id = l.format_id
     left join tv_episodes e on e.tmdb_tv_id = l.tmdb_tv_id and e.season_number = l.season_number and e.episode_number = l.episode_number
     order by l.watched_on desc, l.created_at desc, l.season_number desc, l.episode_number desc
     limit ${TV_LOG_PAGE} offset ${(Math.max(1, page) - 1) * TV_LOG_PAGE}`);
   return {
     total: r.rows[0]?.total ?? 0,
-    rows: r.rows.map((x) => ({ id: x.id, tmdbTvId: x.tmdb_tv_id, show: x.show, season: x.season_number, episode: x.episode_number, episodeName: x.episode_name, watchedOn: x.watched_on, format: x.format, fromMemory: x.from_memory, nth: x.nth })),
+    rows: r.rows.map((x) => ({ id: x.id, tmdbTvId: x.tmdb_tv_id, show: x.show, season: x.season_number, episode: x.episode_number, episodeName: x.episode_name, watchedOn: x.watched_on, format: x.format, formatId: x.format_id, fromMemory: x.from_memory, nth: x.nth })),
   };
 }
 
 export async function deleteTvWatch(id: string) {
   await db.delete(tvWatches).where(eq(tvWatches.id, id));
+}
+
+/** Changes where TV watches happened (one, or several fixed together). Returns how many changed. */
+export async function changeTvWatchFormat(ids: string[], formatId: number): Promise<number> {
+  const r = await db.execute(sql`
+    update tv_watches set format_id = ${formatId}
+    where id = any(${sql.param(ids)}::uuid[]) and format_id <> ${formatId}`);
+  return r.rowCount ?? 0;
 }

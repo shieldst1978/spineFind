@@ -46,6 +46,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
     item.tmdbId && item.itemType === "film" ? availabilityFor(item.tmdbId) : null,
   ]);
   const isFilm = item.itemType === "film";
+  const copy = item.format === "Plex" ? "copy" : "disc";
   const discWatches = history.filter((w) => w.kind === "disc");
   // Default to the disc format matching this copy (4K UltraHD -> 4K Blu Ray).
   const copyFormat = Object.entries(DISC_TO_MEDIA).find(([, media]) => media === item.format)?.[0];
@@ -68,13 +69,33 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
               {item.releaseYear && <span className="font-normal text-stone-500"> ({item.releaseYear})</span>}
             </h1>
             <p className="text-sm text-stone-600 dark:text-stone-400">
-              {item.format}
-              {item.box.title !== item.title && <> · in <em>{item.box.title}</em></>}
-              {" · "}
-              {{ shelf: "on the shelf", loft: "in the loft", gone: "gone" }[item.box.location]}
-              {" · "}
-              <Link href={`/box/${item.box.id}`} className="underline">Edit box</Link>
+              {item.box.location === "plex" ? (
+                // Comes from the Plex library (scripts/plex-sync.ts), so there's no box to edit.
+                <>On Plex{item.box.quality && <> · {item.box.quality}</>}</>
+              ) : (
+                <>
+                  {item.format}
+                  {item.box.title !== item.title && <> · in <em>{item.box.title}</em></>}
+                  {" · "}
+                  {{ shelf: "on the shelf", loft: "in the loft", gone: "gone" }[item.box.location]}
+                  {" · "}
+                  <Link href={`/box/${item.box.id}`} className="underline">Edit box</Link>
+                </>
+              )}
             </p>
+            {item.otherCopies.length > 0 && (
+              <p className="text-sm text-stone-600 dark:text-stone-400">
+                Also:{" "}
+                {item.otherCopies.map((c, i) => (
+                  <span key={c.id}>
+                    {i > 0 && ", "}
+                    <Link href={`/item/${c.id}`} className="underline">
+                      {c.location === "plex" ? "on Plex" : `${c.format} ${c.location === "loft" ? "in the loft" : "on the shelf"}`}
+                    </Link>
+                  </span>
+                ))}
+              </p>
+            )}
           </div>
         </div>
       </header>
@@ -88,7 +109,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
               You&apos;ve seen the film{" "}
               {history.length > 0
                 ? `(${history.length} ${history.length === 1 ? "watch" : "watches"} in other formats)`
-                : `(${SEEN_SOURCE[item.filmSeenMark!] ?? "marked seen"})`}, just not on this disc.
+                : `(${SEEN_SOURCE[item.filmSeenMark!] ?? "marked seen"})`}, just not on this {copy}.
             </span>
             {item.filmSeenMark && history.length === 0 && (
               <form action={unmarkFilmSeen.bind(null, item.id)}>
@@ -130,7 +151,11 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
             <button type="submit" className="w-full rounded-lg bg-stone-900 px-4 py-2.5 font-medium text-white dark:bg-stone-100 dark:text-stone-900">
               I watched this
             </button>
-            <p className="text-xs text-stone-500">Only disc formats (Blu Ray, 4K Blu Ray, DVD, HD DVD) mark this copy as watched. Other formats still go in your watch log.</p>
+            <p className="text-xs text-stone-500">
+              {item.format === "Plex"
+                ? "Only Plex marks this copy as watched. Other formats still go in your watch log."
+                : "Only disc formats (Blu Ray, 4K Blu Ray, DVD, HD DVD) mark this copy as watched. Other formats still go in your watch log."}
+            </p>
           </form>
 
           {(discWatches.length === 0 || (history.length === 0 && !item.filmSeenMark)) && (
@@ -139,14 +164,14 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
               {history.length === 0 && !item.filmSeenMark && !item.watchedBeforeLogging && (
                 <form action={markFilmSeen.bind(null, item.id, "")}>
                   <button type="submit" className="w-full rounded-lg border border-stone-300 px-4 py-2 text-sm dark:border-stone-700">
-                    I&apos;ve seen the film (not this disc)
+                    I&apos;ve seen the film (not this {copy})
                   </button>
                 </form>
               )}
               {discWatches.length === 0 && (
                 <form action={setSeenBefore.bind(null, item.id, !item.watchedBeforeLogging)}>
                   <button type="submit" className="w-full rounded-lg border border-stone-300 px-4 py-2 text-sm dark:border-stone-700">
-                    {item.watchedBeforeLogging ? "Undo “watched this disc before”" : "Watched this disc before (no date)"}
+                    {item.watchedBeforeLogging ? `Undo “watched this ${copy} before”` : `Watched this ${copy} before (no date)`}
                   </button>
                 </form>
               )}
@@ -278,7 +303,7 @@ function Status({ item, discWatches, lastDisc }: { item: Awaited<ReturnType<type
       <span className="text-emerald-600">✓</span> Watched
       <span className="text-stone-600 dark:text-stone-400">
         {discWatches > 0
-          ? ` · ${discWatches} disc ${discWatches === 1 ? "watch" : "watches"}, last on ${formatDate(lastDisc!)}`
+          ? ` · ${discWatches} ${item.format === "Plex" ? "Plex" : "disc"} ${discWatches === 1 ? "watch" : "watches"}, last on ${formatDate(lastDisc!)}`
           : " · seen before logging (no date)"}
       </span>
     </p>

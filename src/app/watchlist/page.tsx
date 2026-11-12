@@ -13,7 +13,8 @@ export const metadata: Metadata = { title: "Watchlist · SpineFind" };
 
 const VIEWS = { all: "All", tonight: "Watch tonight", shelf: "On your shelf", services: "On your services" } as const;
 type View = keyof typeof VIEWS;
-const onShelf = (e: WatchlistEntry) => e.owned?.where === "shelf";
+// Plex counts as the shelf: you can watch it tonight.
+const onShelf = (e: WatchlistEntry) => e.owned?.where === "shelf" || e.owned?.where === "plex";
 const streaming = (e: WatchlistEntry) => (e.services?.length ?? 0) > 0;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 const field = "min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm dark:border-stone-700 dark:bg-stone-900";
@@ -135,7 +136,7 @@ function Row({ e, view }: { e: WatchlistEntry; view: View }) {
         <p className="text-xs">
           {e.owned ? (
             <Link href={`/item/${e.owned.itemId}`} className="text-emerald-800 underline dark:text-emerald-300">
-              {e.owned.where === "shelf" ? "On your shelf" : "In the loft"}: {e.owned.box}, {e.owned.spine}
+              {e.owned.where === "plex" ? "On Plex" : <>{e.owned.where === "shelf" ? "On your shelf" : "In the loft"}: {e.owned.box}, {e.owned.spine}</>}
             </Link>
           ) : e.services === null ? (
             <span className="text-stone-500">Checking streaming…</span>

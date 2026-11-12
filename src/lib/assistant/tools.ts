@@ -3,6 +3,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { runReadOnlyQuery } from "@/db/assistant";
 import { availabilityFor, listServices } from "@/db/streaming";
 import { db } from "@/db";
+import { OWNED_ORDER } from "@/db/owned";
 import { sql } from "drizzle-orm";
 import { discoverOnServices, searchMovies, TMDB_GENRES } from "@/lib/tmdb";
 
@@ -44,7 +45,7 @@ export const TOOLS: Anthropic.Messages.ToolUnion[] = [
     description:
       "Films currently streaming (or free) on Tim's UK services, from TMDB, with which of his services each is on, TMDB score and votes. " +
       "Use for 'anything' recommendations. Films he has watched or marked seen are left out unless include_watched is true. " +
-      "Films he owns are flagged (owned: shelf/loft, box, spine): suggest his own copy rather than streaming. " +
+      "Films he owns are flagged (owned: shelf/plex/loft, box, spine; plex = in his Plex library, no spine): suggest his own copy rather than streaming. " +
       "For underrated films use sort rating with max_votes 1000.",
     input_schema: {
       type: "object",
@@ -86,7 +87,7 @@ async function ownedCopies(ids: number[]): Promise<Map<number, { where: string; 
     select distinct on (i.tmdb_id) i.tmdb_id, p.location::text as location, p.title as box, array_to_string(p.spine_colours, ' / ') as spine, i.format::text as format
     from items i join products p on p.id = i.product_id
     where i.tmdb_id in ${ids} and p.location <> 'gone'
-    order by i.tmdb_id, p.location = 'shelf' desc`);
+    order by i.tmdb_id, ${OWNED_ORDER}`);
   return new Map(r.rows.map((x) => [x.tmdb_id, { where: x.location, box: x.box, spine: x.spine, format: x.format }]));
 }
 const int = (v: unknown) => (typeof v === "number" && Number.isInteger(v) ? v : undefined);

@@ -25,10 +25,11 @@ export default async function TvShowPage({ params, searchParams }: PageProps<"/t
   if (!page) notFound();
   const { show, seasons, next, watchedEpisodes, totalEpisodes } = page;
   // Default format: what you last watched this show on, else the format matching its network (Apple TV, Netflix…),
-  // else your most used non-disc format.
+  // else what you last watched any TV on, else your most used streaming/TV format. Never cinema or a disc by default.
   const fold = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const byNetwork = formats.find((f) => f.kind !== "disc" && show.networks.some((n) => fold(n) === fold(f.name) || fold(f.name).startsWith(fold(n)) || fold(n).startsWith(fold(f.name))));
-  const defaultFormat = page.lastFormatId ?? byNetwork?.id ?? formats.find((f) => f.kind !== "disc")?.id ?? formats[0]?.id;
+  const tvLike = (f: Format) => f.kind !== "disc" && f.kind !== "cinema";
+  const byNetwork = formats.find((f) => tvLike(f) && show.networks.some((n) => fold(n) === fold(f.name) || fold(f.name).startsWith(fold(n)) || fold(n).startsWith(fold(f.name))));
+  const defaultFormat = page.lastFormatId ?? byNetwork?.id ?? page.lastTvFormatId ?? formats.find(tvLike)?.id ?? formats[0]?.id;
   const today = todayUk();
   const years = [show.firstAirDate?.slice(0, 4), show.status === "Ended" ? show.lastAirDate?.slice(0, 4) : ""].filter(Boolean).join("–");
   const facts = [show.networks.slice(0, 2).join(", "), show.creators.length ? `created by ${show.creators.slice(0, 2).join(", ")}` : "", show.status].filter(Boolean).join(" · ");

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { viewingFormats } from "@/db/schema";
-import { deleteTvWatch, ensureSeason, logEpisodes } from "@/db/tv";
+import { changeTvWatchFormat, deleteTvWatch, ensureSeason, logEpisodes } from "@/db/tv";
 import { parseWatchDate, text, UUID } from "@/lib/form-values";
 
 async function formatFrom(form: FormData) {
@@ -47,6 +47,18 @@ export async function logSeasonEpisodes(tmdbTvId: number, seasonNumber: number, 
   if (!episodes.length) back(tmdbTvId, { error: "Tick the episodes you watched, or choose the whole season.", season: String(seasonNumber) });
   const n = await logEpisodes({ tmdbTvId, seasonNumber, episodes, watchedOn: date.date, formatId, fromMemory: text(form.get("from_memory")) === "yes" });
   back(tmdbTvId, { logged: n === 1 ? `S${seasonNumber} E${episodes[0]}` : `${n} episodes of season ${seasonNumber}`, season: String(seasonNumber) });
+}
+
+/** Changes a TV watch's format, plus any others ticked with it ("also": comma-separated watch ids). */
+export async function editTvWatchFormat(id: string, form: FormData) {
+  const backTo = text(form.get("back"));
+  const safe = /^\/(tv|watches\/tv)(\/|\?|$)/.test(backTo) ? backTo : "/watches/tv";
+  const formatId = await formatFrom(form);
+  const ids = [id, ...text(form.get("also")).split(",")].filter((x) => UUID.test(x));
+  const n = ids.length && formatId ? await changeTvWatchFormat(ids, formatId) : 0;
+  revalidatePath("/watches/tv");
+  revalidatePath("/tv", "layout");
+  redirect(`${safe}${safe.includes("?") ? "&" : "?"}${new URLSearchParams({ changed: String(n) })}`);
 }
 
 /** Deletes one TV watch (two taps: confirm=yes), returning to the TV log or the show. */
